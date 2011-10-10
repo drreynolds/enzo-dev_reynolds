@@ -327,6 +327,7 @@ public:
 /* Return time, timestep */
 
    FLOAT ReturnTime() {return Time;};
+   FLOAT ReturnOldTime() {return OldTime;};
    float ReturnTimeStep() {return dtFixed;};
 
   /* Return, set grid ID */
@@ -493,6 +494,10 @@ public:
    formalism when using Gadget equilibrium cooling. */
 
    int GadgetComputeTemperatureDEF(FLOAT time, float *temperature);
+
+/* Baryons: compute the dust temperature. */
+
+   int ComputeDustTemperatureField(float *temperature, float *dust_temperature);
 
 /* Baryons: compute X-ray emissivity in specified band. */
 
@@ -1620,7 +1625,8 @@ int CreateParticleTypeGrouping(hid_t ptype_dset,
 
   /* Identify colour field */
 
-  int IdentifyColourFields(int &SNColourNum, int &MetalNum, int &MBHColourNum,
+  int IdentifyColourFields(int &SNColourNum, int &MetalNum, 
+			   int &MetalIaNum, int &MBHColourNum,
 			   int &Galaxy1ColourNum, int &Galaxy2ColourNum);
 
   /* Identify Multi-species fields. */
@@ -1932,6 +1938,7 @@ int zEulerSweep(int j, int NumberOfSubgrids, fluxes *SubgridFluxes[],
 			  float CosmologySimulationInitialFractionH2I,
 			  float CosmologySimulationInitialFractionH2II,
 			  float CosmologySimulationInitialFractionMetal,
+			  float CosmologySimulationInitialFractionMetalIa,
 #ifdef TRANSFER
 			  float RadHydroInitialRadiationEnergy,
 #endif
@@ -1987,6 +1994,7 @@ int zEulerSweep(int j, int NumberOfSubgrids, fluxes *SubgridFluxes[],
 			  float CosmologySimulationInitialFractionH2I,
 			  float CosmologySimulationInitialFractionH2II,
 			  float CosmologySimulationInitialFractionMetal,
+			  float CosmologySimulationInitialFractionMetalIa,
 			  int   CosmologySimulationUseMetallicityField,
 			  PINT &CurrentNumberOfParticles,
 			  int CosmologySimulationManuallySetParticleMassRatio,

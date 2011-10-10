@@ -15,6 +15,7 @@
 ************************************************************************/
 
 #include <stdio.h>
+#include "ErrorExceptions.h"
 #include "macros_and_parameters.h"
 #include "typedefs.h"
 #include "global_data.h"
@@ -22,9 +23,6 @@
 #include "GridList.h"
 #include "ExternalBoundary.h"
 #include "Grid.h"
-#include "Hierarchy.h"
-#include "LevelHierarchy.h"
-#include "TopGridData.h"
 
 /* function prototypes */
 
@@ -103,7 +101,6 @@ int grid::ComputeAccelerationsFromExternalPotential(int DifferenceType,
 
 
  
-    
   if (DifferenceType != PARTICLES) {
     
     for (dim = 0; dim < GridRank; dim++)
@@ -170,7 +167,6 @@ int grid::ComputeAccelerationsFromExternalPotential(int DifferenceType,
     delete [] Acceleration[dim];
     Acceleration[dim] = NULL;
   }
-   
 
   return SUCCESS;
 }

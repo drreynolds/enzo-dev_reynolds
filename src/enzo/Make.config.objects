@@ -37,6 +37,8 @@ OBJS_CONFIG_LIB = \
         calc_photo_rates.o \
         calc_rad.o \
         calc_rates.o \
+        calc_tdust_1d.o \
+	calc_tdust_3d.o \
         CalcEmiss.o \
         CheckEmissivity.o \
         ClearEmissivity.o \
@@ -170,6 +172,7 @@ OBJS_CONFIG_LIB = \
         FastSiblingLocatorFinalize.o \
         FastSiblingLocatorInitialize.o \
         FastSiblingLocatorInitializeStaticChainingMesh.o \
+	feedback_formulae.o \
         fft66.o \
         fft90.o \
         ffte4X.o \
@@ -340,6 +343,7 @@ OBJS_CONFIG_LIB = \
 	Grid_ComputeCellCenteredField.o \
 	Grid_ComputeConductionTimeStep.o \
 	Grid_ComputeCoolingTime.o \
+	Grid_ComputeDustTemperatureField.o \
 	Grid_ComputeElementalDensity.o \
 	Grid_ComputeEnergy.o \
 	Grid_ComputeExternalNohBoundary.o \
@@ -801,6 +805,7 @@ OBJS_CONFIG_LIB = \
         Star_SetFeedbackFlag.o \
 	Star_SphereContained.o \
 	Star_SubtractAccretedMassFromCell.o \
+	star_feedback_pn_snia.o \
         star_maker1.o \
         star_maker2.o \
         star_maker3.o \

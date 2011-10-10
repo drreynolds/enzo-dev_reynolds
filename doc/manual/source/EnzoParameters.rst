@@ -1134,30 +1134,12 @@ creating Cloudy datasets.
     are made with the intention that only the cooling rates are to be
     used. Default: 0 (off).
 
-``IncludeCloudyMMW`` (external)
-    An integer (0 or 1) specifying whether the additional mean
-    molecular weight contributed by the metals be used in the
-    conversion from internal energy to temperature. These values will
-    come from the Cloudy dataset. For metallicities less than solar,
-    this addition will be negligible. Default: 0 (off).
-
 ``CMBTemperatureFloor`` (external)
     An integer (0 or 1) specifying whether a temperature floor is
     created at the temperature of the cosmic microwave background
     (T\ :sub:`CMB`\  = 2.72 (1 + z) K). This is accomplished in the
     code by subtracting the cooling rate at T\ :sub:`CMB`\  such that
     Cooling = Cooling(T) - Cooling(T\ :sub:`CMB`\ ). Default: 1 (on).
-
-``CloudyMetallicityNormalization`` (external)
-    A float value used in the conversion of metal density into
-    metallicity. This value will change depending on the specific
-    abundance patterns used to make the Cloudy dataset. The value of
-    this factor is calculated as the sum of (A\ :sub:`i`\  \*
-    m\ :sub:`i`\ ) over all elements i heavier than He, where
-    A\ :sub:`i`\  is the solar number abundance relative to H and
-    m\ :sub:`i`\  is the atomic mass. For the solar abundance pattern
-    from the latest version of Cloudy, using all metals through Zn,
-    this value is 0.018477. Default: 0.018477.
 
 ``CloudyElectronFractionFactor`` (external)
     A float value to account for additional electrons contributed by
@@ -1262,6 +1244,27 @@ For details on each of the different star formation methods available in Enzo se
     or 1.  See :ref:`distributed_feedback` for an illustration.
     Default: 0.
 
+``StarMakerTypeIaSNe`` (external)
+    This parameter turns on thermal and chemical feedback from Type Ia
+    supernovae.  The mass loss and luminosity of the supernovae are
+    determined from `fits of K. Nagamine
+    <http://www.physics.unlv.edu/~kn/SNIa_2/>`_.  The ejecta are
+    traced in a separate species field, ``MetalSNIa_Density``.  The
+    metallicity of star particles that comes from this ejecta is
+    stored in the particle attribute ``typeia_fraction``.  Can be used
+    with ``StarParticleCreation`` = 0, 1, 2, 5, 7, and 8.  Default:
+    0.
+
+``StarMakerPlanetaryNebulae`` (external) 
+    This parameter turns on thermal and chemical feedback from
+    planetary nebulae.  The mass loss and luminosity are taken from
+    the same `fits from K. Nagamine
+    <http://www.physics.unlv.edu/~kn/SNIa_2/>`_.  The chemical
+    feedback injects gas with the same metallicity as the star
+    particle, and the thermal feedback equates to a 10 km/s wind.  The
+    ejecta are not stored in its own species field.  Can be used
+    with ``StarParticleCreation`` = 0, 1, 2, 5, 7, and 8.  Default: 0.
+
 Normal Star Formation
 ^^^^^^^^^^^^^^^^^^^^^
 
@@ -1311,9 +1314,12 @@ The parameters below are considered in ``StarParticleCreation`` method
     returned to the gas phase as thermal energy. Default: 1e-5
 ``StarEnergyToStellarUV`` (external)
     The fraction of the rest-mass energy of the stars created which is
-    returned as UV radiation with a young star spectrum. This is used when calculating the radiation background. Default: 3e-6
+    returned as UV radiation with a young star spectrum. This is used
+    when calculating the radiation background. Default: 3e-6
 ``StarEnergyToQuasarUV`` (external)
-    The fraction of the rest-mass energy of the stars created which is returned as UV radiation with a quasar spectrum. This is used when calculating the radiation background. Default: 5e-6
+    The fraction of the rest-mass energy of the stars created which is
+    returned as UV radiation with a quasar spectrum. This is used when
+    calculating the radiation background. Default: 5e-6
 
 Population III Star Formation
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -1418,9 +1424,10 @@ Background Radiation Parameters
   
      1. Haardt & Madau spectrum with q_alpha=1.5
      2. Haardt & Madau spectrum with q_alpha = 1.8
-     3. reserved for experimentation
+     3. Modified Haardt & Madau spectrum to match observations
+     	(Kirkman & Tytler 2005).
      4. H&M spectrum (q_alpha=1.5. supplemented with an X-ray Compton heating
-         background from Madau & Efstathiou (see astro-ph/9902080)
+        background from Madau & Efstathiou (see astro-ph/9902080)
      9. a constant molecular H2 photo-dissociation rate
      10. internally computed radiation field using the algorithm of Cen & Ostriker
      11. same as previous, but with very, very simple optical shielding fudge
