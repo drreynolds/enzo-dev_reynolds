@@ -41,8 +41,8 @@ int CoolingTestInitialize(FILE *fptr, FILE *Outfptr, HierarchyEntry &TopGrid,
   fprintf(stderr,"Initializing cooling test.\n");
 
   const char *DensName = "Density";
-  const char *TEName   = "Total_Energy";
-  const char *GEName   = "Gas_Energy";
+  const char *TEName   = "TotalEnergy";
+  const char *GEName   = "GasEnergy";
   const char *Vel1Name = "x-velocity";
   const char *Vel2Name = "y-velocity";
   const char *Vel3Name = "z-velocity";
@@ -125,6 +125,14 @@ int CoolingTestInitialize(FILE *fptr, FILE *Outfptr, HierarchyEntry &TopGrid,
 	      line);
  
   } // end input from parameter file
+
+
+  /* error checking */
+  if (Mu != 0.6) {
+    if (MyProcessorNumber == ROOT_PROCESSOR)
+      fprintf(stderr, "warning: mu = 0.6 assumed in initialization; setting Mu = 0.6 for consistency.\n");
+    Mu = 0.6;
+  }
 
   // Use metallicity field.
   TestProblemData.UseMetallicityField = 1;

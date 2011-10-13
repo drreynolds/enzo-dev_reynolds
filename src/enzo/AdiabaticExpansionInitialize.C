@@ -42,9 +42,12 @@ int GetUnits(float *DensityUnits, float *LengthUnits,
 	     float *TemperatureUnits, float *TimeUnits,
 	     float *VelocityUnits, FLOAT Time);
  
+int CosmologyComputeTimeFromRedshift(FLOAT Redshift, FLOAT *TimeCodeUnits);
+
 int AdiabaticExpansionInitialize(FILE *fptr, FILE *Outfptr,
 			       HierarchyEntry &TopGrid)
 {
+
   const char *DensName = "Density";
   const char *TEName   = "TotalEnergy";
   const char *GEName   = "GasEnergy";
@@ -57,7 +60,8 @@ int AdiabaticExpansionInitialize(FILE *fptr, FILE *Outfptr,
   const char *PhiName = "Phi";
   const char *DebugName = "Debug";
   const char *Phi_pName = "Phip";
- 
+  const char *GPotName  = "Grav_Potential";
+
   /* declarations */
  
   char line[MAX_LINE_LENGTH];
@@ -110,6 +114,15 @@ int AdiabaticExpansionInitialize(FILE *fptr, FILE *Outfptr,
       fprintf(stderr, "warning: the following parameter line was not interpreted:\n%s\n", line);
  
   }
+
+  /* error checking */
+  if (Mu != DEFAULT_MU) {
+    if (MyProcessorNumber == ROOT_PROCESSOR)
+      fprintf(stderr, "warning: mu =%f assumed in initialization; setting "
+	      "Mu = %f for consistency.\n", DEFAULT_MU, DEFAULT_MU);
+    Mu = DEFAULT_MU;
+  }
+
  
   /* Get the units so we can convert temperature later. */
  
@@ -169,7 +182,10 @@ int AdiabaticExpansionInitialize(FILE *fptr, FILE *Outfptr,
     DataLabel[i++] = (char*) Phi_pName;
     DataLabel[i++] = (char*) DebugName;
   }
+  if (WritePotential)
+    DataLabel[i++] = (char*) GPotName;  
  
+
   DataUnits[0] = NULL;
   DataUnits[1] = NULL;
   DataUnits[2] = NULL;

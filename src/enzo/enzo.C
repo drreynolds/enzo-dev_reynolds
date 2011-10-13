@@ -45,6 +45,7 @@
 #include "CosmologyParameters.h"
 #include "communication.h"
 #include "CommunicationUtilities.h"
+#include "EventHooks.h"
 #ifdef TRANSFER
 #include "PhotonCommunication.h"
 #include "ImplicitProblemABC.h"
@@ -54,7 +55,7 @@
 int InitializePythonInterface(int argc, char **argv);
 int FinalizePythonInterface();
 #endif
- 
+
 // Function prototypes
  
 int InitializeNew(  char *filename, HierarchyEntry &TopGrid, TopGridData &tgd,
@@ -120,6 +121,7 @@ int InterpretCommandLine(int argc, char *argv[], char *myname,
 			 int &Level, int &HaloFinderOnly, 
 			 int &WritePotentialOnly,
 			 int &SmoothedDarkMatterOnly,
+			 int &WriteCoolingTimeOnly,
 			 int MyProcessorNumber);
 void AddLevel(LevelHierarchyEntry *Array[], HierarchyEntry *Grid, int level);
 int SetDefaultGlobalValues(TopGridData &MetaData);
@@ -198,11 +200,21 @@ int OutputSmoothedDarkMatterOnly(char *ParameterFile,
 		       , ImplicitProblemABC *ImplicitSolver
 #endif
                  );
+int OutputCoolingTimeOnly(char *ParameterFile,
+			  LevelHierarchyEntry *LevelArray[], 
+			  HierarchyEntry *TopGrid,
+			  TopGridData &MetaData,
+			  ExternalBoundary &Exterior
+#ifdef TRANSFER
+			  , ImplicitProblemABC *ImplicitSolver
+#endif
+			  );
+
 
 void CommunicationAbort(int);
 int ENZO_OptionsinEffect(void);
 int FOF(TopGridData *MetaData, LevelHierarchyEntry *LevelArray[], 
-	int WroteData=1);
+	int WroteData=1, int FOFOnly=FALSE);
 
 #ifdef TASKMAP
 int GetNodeFreeMemory(void);
@@ -228,8 +240,13 @@ void PrintMemoryUsage(const char *str);
  
 //  ENZO Main Program
 
- 
-Eint32 main(Eint32 argc, char *argv[])
+#ifdef SHARED_LIBRARY
+#define MAIN_NAME enzo_main
+#else
+#define MAIN_NAME main
+#endif
+
+Eint32 MAIN_NAME(Eint32 argc, char *argv[])
 {
 
 
@@ -295,12 +312,14 @@ Eint32 main(Eint32 argc, char *argv[])
      Increase the memory pool by 1/4th of the initial size as more
      memory is needed. */
 
+#ifdef TRANSFER
 #ifdef MEMORY_POOL
   const int PhotonMemorySize = MEMORY_POOL_SIZE;
   int PhotonSize = sizeof(PhotonPackageEntry);
   PhotonMemoryPool = new MPool::MemoryPool(PhotonMemorySize*PhotonSize,
 					   PhotonSize,
 					   PhotonMemorySize*PhotonSize/4);
+#endif
 #endif
 
   // Begin 
@@ -338,6 +357,7 @@ Eint32 main(Eint32 argc, char *argv[])
     HaloFinderOnly           = FALSE,
     WritePotentialOnly       = FALSE,
     SmoothedDarkMatterOnly   = FALSE,
+    WriteCoolingTimeOnly     = FALSE,
     project                  = FALSE,
     ProjectionDimension      = INT_UNDEFINED,
     ProjectionSmooth         = FALSE,
@@ -433,7 +453,7 @@ Eint32 main(Eint32 argc, char *argv[])
 			   RegionStartCoordinates, RegionEndCoordinates,
 			   RegionLevel, HaloFinderOnly,
 			   WritePotentialOnly, SmoothedDarkMatterOnly,
-			   MyProcessorNumber) == FAIL) {
+			   WriteCoolingTimeOnly, MyProcessorNumber) == FAIL) {
     if(int_argc==1){
       my_exit(EXIT_SUCCESS);
     } else {
@@ -472,6 +492,17 @@ Eint32 main(Eint32 argc, char *argv[])
     }
 #endif
 
+#ifdef NEW_PROBLEM_TYPES
+  if (ProblemType == -978)
+  {
+    CurrentProblemType = select_problem_type(ProblemTypeName);
+    /* This gives us the poblem type, but we do not yet have
+       our event hooks set up.  When the day comes that event hooks are all
+       stored in parameter files, this will not be necessary. */
+    CurrentProblemType->InitializeFromRestart(TopGrid, MetaData);
+  }
+#endif
+
     // TA: Changed this:
     //    if (!ParallelRootGridIO && restart && TopGrid.NextGridThisLevel == NULL) {
     // thinking that TopGrid.NextGridThisLevel == NULL when was ParallelRootGridIO == 0 
@@ -479,7 +510,7 @@ Eint32 main(Eint32 argc, char *argv[])
     // Removing it however lets one to restart from a single grid
     // but write parallel root grid io for all new outputs
 
-    if (restart && TopGrid.NextGridThisLevel == NULL) {
+    if (restart && TopGrid.NextGridThisLevel == NULL && !HaloFinderOnly) {
       CommunicationPartitionGrid(&TopGrid, 0);  // partition top grid if necessary
     }
  
@@ -562,8 +593,8 @@ Eint32 main(Eint32 argc, char *argv[])
  
   if (HaloFinderOnly) {
     InlineHaloFinder = TRUE;
-    HaloFinderSubfind = TRUE;
-    FOF(&MetaData, LevelArray);
+    HaloFinderSubfind = FALSE;
+    FOF(&MetaData, LevelArray, TRUE, TRUE);
     my_exit(EXIT_SUCCESS);
   }
 
@@ -584,6 +615,16 @@ Eint32 main(Eint32 argc, char *argv[])
 		       , ImplicitSolver
 #endif
                );
+    my_exit(EXIT_SUCCESS);
+  }
+
+  if (WriteCoolingTimeOnly) {
+    OutputCoolingTimeOnly(ParameterFile, LevelArray, &TopGrid,
+			  MetaData, Exterior
+#ifdef TRANSFER
+			  , ImplicitSolver
+#endif
+			  );
     my_exit(EXIT_SUCCESS);
   }
 
