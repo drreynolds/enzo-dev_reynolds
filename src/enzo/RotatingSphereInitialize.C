@@ -52,6 +52,18 @@ int RotatingSphereInitialize(FILE *fptr, FILE *Outfptr, HierarchyEntry &TopGrid,
    char *Vel1Name = "x-velocity";
    char *Vel2Name = "y-velocity";
    char *Vel3Name = "z-velocity";
+   char *ElectronName = "Electron_Density";
+   char *HIName = "HI_Density";
+   char *HIIName = "HII_Density";
+   char *HeIName = "HeI_Density";
+   char *HeIIName = "HeII_Density";
+   char *HeIIIName = "HeIII_Density";
+   char *HMName = "HM_Density";
+   char *H2IName = "H2I_Density";
+   char *H2IIName = "H2II_Density";
+   char *DIName = "DI_Density";
+   char *DIIName = "DII_Density";
+   char *HDIName = "HDI_Density";
    char *MetalName = "Metal_Density";
 
    /* parameter declarations */
@@ -115,8 +127,24 @@ int RotatingSphereInitialize(FILE *fptr, FILE *Outfptr, HierarchyEntry &TopGrid,
       ret += sscanf(line, "RotatingSphereTurbulenceRMS = %"FSYM, &RotatingSphereTurbulenceRMS);
       ret += sscanf(line, "RotatingSphereRedshift = %"FSYM, &RotatingSphereRedshift);
 
-      ret += sscanf(line, "TestProblemUseMetallicityField   = %"ISYM, &TestProblemData.UseMetallicityField);
-      ret += sscanf(line, "TestProblemInitialMetallicityFraction   = %"FSYM, &TestProblemData.MetallicityField_Fraction);
+      ret += sscanf(line, "TestProblemHydrogenFractionByMass = %"FSYM, &TestProblemData.HydrogenFractionByMass);
+      ret += sscanf(line, "TestProblemDeuteriumToHydrogenRatio = %"FSYM, &TestProblemData.DeuteriumToHydrogenRatio);
+
+      ret += sscanf(line, "TestProblemInitialHIFraction = %"FSYM, &TestProblemData.HI_Fraction);
+      ret += sscanf(line, "TestProblemInitialHIIFraction = %"FSYM, &TestProblemData.HII_Fraction);
+      ret += sscanf(line, "TestProblemInitialHeIFraction = %"FSYM, &TestProblemData.HeI_Fraction);
+      ret += sscanf(line, "TestProblemInitialHeIIFraction = %"FSYM, &TestProblemData.HeII_Fraction);
+      ret += sscanf(line, "TestProblemInitialHeIIIFraction = %"FSYM, &TestProblemData.HeIII_Fraction);
+      ret += sscanf(line, "TestProblemInitialHMFraction = %"FSYM, &TestProblemData.HM_Fraction);
+      ret += sscanf(line, "TestProblemInitialH2IFraction = %"FSYM, &TestProblemData.H2I_Fraction);
+      ret += sscanf(line, "TestProblemInitialH2IIFraction = %"FSYM, &TestProblemData.H2II_Fraction);
+      ret += sscanf(line, "TestProblemInitialDIFraction = %"FSYM, &TestProblemData.DI_Fraction);
+      ret += sscanf(line, "TestProblemInitialDIIFraction = %"FSYM, &TestProblemData.DII_Fraction);
+      ret += sscanf(line, "TestProblemInitialHDIFraction = %"FSYM, &TestProblemData.HDI_Fraction);
+
+      ret += sscanf(line, "TestProblemUseMetallicityField = %"ISYM, &TestProblemData.UseMetallicityField);
+      ret += sscanf(line, "TestProblemInitialMetallicityFraction = %"FSYM, &TestProblemData.MetallicityField_Fraction);
+
 
       // Issue a warning if the line is suspicious 
       if (ret == 0 && strstr(line, "=") && (strstr(line, "RotatingSphere") || strstr(line, "TestProblem")) &&
@@ -125,8 +153,9 @@ int RotatingSphereInitialize(FILE *fptr, FILE *Outfptr, HierarchyEntry &TopGrid,
                  "*** warning: the following parameter line was not interpreted:\n%s\n",
                  line);
       } // end input from parameter file
- 
 
+   TestProblemData.MultiSpecies = MultiSpecies;  // set this from global data (kind of a hack, but necessary)
+ 
    // Initialize a uniform grid
    float uniform_velocity[3] = {0.0, 0.0, 0.0};
    float uniform_density = 1.0;
@@ -348,6 +377,27 @@ int RotatingSphereInitialize(FILE *fptr, FILE *Outfptr, HierarchyEntry &TopGrid,
 
    if(MetaData.TopGridRank > 2)
       DataLabel[i++] = Vel3Name;
+
+   if (TestProblemData.MultiSpecies) {
+      DataLabel[i++] = ElectronName;
+      DataLabel[i++] = HIName;
+      DataLabel[i++] = HIIName;
+      DataLabel[i++] = HeIName;
+      DataLabel[i++] = HeIIName;
+      DataLabel[i++] = HeIIIName;
+
+      if (TestProblemData.MultiSpecies > 1) {
+         DataLabel[i++] = HMName;
+         DataLabel[i++] = H2IName;
+         DataLabel[i++] = H2IIName;
+         }
+
+      if (TestProblemData.MultiSpecies > 2) {
+         DataLabel[i++] = DIName;
+         DataLabel[i++] = DIIName;
+         DataLabel[i++] = HDIName;
+         }
+      }
 
    if (TestProblemData.UseMetallicityField)
       DataLabel[i++] = MetalName;

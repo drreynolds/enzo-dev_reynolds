@@ -123,7 +123,9 @@ int grid::RotatingSphereInitializeGrid(float RotatingSphereNFWMass,
    for (int dim = 0; dim < GridRank; dim++)
       size *= GridDimension[dim];
 
-   int DensNum, GENum, TENum, Vel1Num, Vel2Num, Vel3Num, MetalNum;
+   int DensNum, GENum, TENum, Vel1Num, Vel2Num, Vel3Num;
+   int DeNum, HINum, HIINum, HeINum, HeIINum, HeIIINum, HMNum, H2INum, H2IINum,
+      DINum, DIINum, HDINum, MetalNum;
 
    if (this->IdentifyPhysicalQuantities(DensNum, GENum, Vel1Num, Vel2Num,
                       Vel3Num, TENum) == FAIL) {
@@ -132,12 +134,18 @@ int grid::RotatingSphereInitializeGrid(float RotatingSphereNFWMass,
 
    int MetallicityField = FALSE;
 
+   if (MultiSpecies) {
+      if (IdentifySpeciesFields(DeNum, HINum, HIINum, HeINum, HeIINum, HeIIINum,
+                      HMNum, H2INum, H2IINum, DINum, DIINum, HDINum) == FAIL) {
+         ENZO_FAIL("Error in grid->IdentifySpeciesFields.");
+         }
+      }
+
    if ((MetalNum = FindField(Metallicity, FieldType, NumberOfBaryonFields))
          != -1)
       MetallicityField = TRUE;
    else
       MetalNum = 0;
-
 
    // Get the units
    float DensityUnits, LengthUnits, TemperatureUnits = 1, TimeUnits, VelocityUnits; 
@@ -147,6 +155,10 @@ int grid::RotatingSphereInitializeGrid(float RotatingSphereNFWMass,
 	    &TimeUnits, &VelocityUnits, &MassUnits, Time);
 
    printf("Getting ready to set up the sphere.\n");
+
+   // Set the gravitational constant that Enzo uses.
+   // This is 4 pi G_Cgs in code units.
+   GravitationalConstant = 4.0 * M_PI * G_CGS * DensityUnits * pow(TimeUnits, 2.0);
 
    // Set up the NFW halo.
    float g_code;
@@ -161,6 +173,10 @@ int grid::RotatingSphereInitializeGrid(float RotatingSphereNFWMass,
    float nfw_scale_radius = nfw_mvir_code / (4.0 * M_PI * nfw_scale_density * (log(1.0+c) - (c/(1.0+c))));
    nfw_scale_radius = pow(nfw_scale_radius, 1.0/3.0);
 
+   // These are in code units. At the end of initialization,
+   // they get changed to cgs units, since that is what is used in 
+   // Grid_ComputeAccelerationFieldExternal.
+   PointSourceGravity = 2;
    PointSourceGravityConstant = 4.0 * M_PI * nfw_scale_density * pow(nfw_scale_radius, 3.0) * (log(2.0) - 0.5);
    PointSourceGravityCoreRadius = nfw_scale_radius;
 
@@ -371,7 +387,7 @@ int grid::RotatingSphereInitializeGrid(float RotatingSphereNFWMass,
 
       // Normalize the turbulent field so that the RMS velocity
       // is some fraction of the halo sound speed.
-      float ssum = 0;
+      float ssum = 0.0;
 
       for (int k = 0; k < pert_size_z; k++)
          for (int j = 0; j < pert_size_y; j++)
@@ -390,6 +406,12 @@ int grid::RotatingSphereInitializeGrid(float RotatingSphereNFWMass,
                turbulence_field_vy[k][j][i] *= (RotatingSphereTurbulenceRMS * nfw_cs / ssum);
                turbulence_field_vz[k][j][i] *= (RotatingSphereTurbulenceRMS * nfw_cs / ssum);
                }
+
+      // Convert the NFW variables to cgs units. This is confusing,
+      // but the acceleration code in Grid_ComputeAccelerationFieldExternal
+      // takes these as cgs rather than code.
+      PointSourceGravityConstant *= MassUnits;
+      PointSourceGravityCoreRadius *= LengthUnits;
 
       // Free some memory.
       delete [] x_s;
@@ -483,6 +505,67 @@ int grid::RotatingSphereInitializeGrid(float RotatingSphereNFWMass,
                BaryonField[Vel2Num][cell_index] += turbulence_field_vy[pert_index[2]][pert_index[1]][pert_index[0]];
                BaryonField[Vel3Num][cell_index] += turbulence_field_vz[pert_index[2]][pert_index[1]][pert_index[0]];
                }
+
+               // Set up the chemistry.
+               if(TestProblemData.UseMetallicityField>0 && MetalNum != FALSE)
+                 BaryonField[MetalNum][cell_index] = BaryonField[DensNum][cell_index]*TestProblemData.MetallicityField_Fraction;
+
+               /* set multispecies values --- EVERYWHERE, not just inside the sphere radius! */
+
+               if(TestProblemData.MultiSpecies) {
+
+                 BaryonField[HIINum][cell_index] = TestProblemData.HII_Fraction * 
+                   TestProblemData.HydrogenFractionByMass * BaryonField[DensNum][cell_index];
+                     
+                 BaryonField[HeIINum][cell_index] = TestProblemData.HeII_Fraction *
+                   BaryonField[DensNum][cell_index] * (1.0-TestProblemData.HydrogenFractionByMass);
+                     
+                 BaryonField[HeIIINum][cell_index] = TestProblemData.HeIII_Fraction *
+                   BaryonField[DensNum][cell_index] * (1.0-TestProblemData.HydrogenFractionByMass);
+
+                 BaryonField[HeINum][cell_index] = 
+                   (1.0 - TestProblemData.HydrogenFractionByMass)*BaryonField[DensNum][cell_index] -
+                   BaryonField[HeIINum][cell_index] - BaryonField[HeIIINum][cell_index];
+                     
+                 if(TestProblemData.MultiSpecies > 1){
+                   BaryonField[HMNum][cell_index] = TestProblemData.HM_Fraction *
+                     BaryonField[HIINum][cell_index];
+               	
+                   BaryonField[H2INum][cell_index] = TestProblemData.H2I_Fraction *
+                     BaryonField[0][cell_index] * TestProblemData.HydrogenFractionByMass;
+               	
+                   BaryonField[H2IINum][cell_index] = TestProblemData.H2II_Fraction * 2.0 *
+                     BaryonField[HIINum][cell_index];
+                 }
+
+                 // HI density is calculated by subtracting off the various ionized fractions
+                 // from the total
+                 BaryonField[HINum][cell_index] = TestProblemData.HydrogenFractionByMass*BaryonField[0][cell_index]
+                   - BaryonField[HIINum][cell_index];
+                 if (MultiSpecies > 1)
+                   BaryonField[HINum][cell_index] -= (BaryonField[HMNum][cell_index] + BaryonField[H2IINum][cell_index]
+               				      + BaryonField[H2INum][cell_index]);
+
+                 // Electron "density" (remember, this is a factor of m_p/m_e scaled from the 'normal'
+                 // density for convenience) is calculated by summing up all of the ionized species.
+                 // The factors of 0.25 and 0.5 in front of HeII and HeIII are to fix the fact that we're
+                 // calculating mass density, not number density (because the BaryonField values are 4x as
+                 // heavy for helium for a single electron)
+                 BaryonField[DeNum][cell_index] = BaryonField[HIINum][cell_index] +
+                   0.25*BaryonField[HeIINum][cell_index] + 0.5*BaryonField[HeIIINum][cell_index];
+                 if (MultiSpecies > 1)
+                   BaryonField[DeNum][cell_index] += 0.5*BaryonField[H2IINum][cell_index] -
+                     BaryonField[HMNum][cell_index];
+                     
+                 // Set deuterium species (assumed to be a negligible fraction of the total, so not
+                 // counted in the conservation)
+                 if(TestProblemData.MultiSpecies > 2){
+                   BaryonField[DINum ][cell_index]  = TestProblemData.DeuteriumToHydrogenRatio * BaryonField[HINum][cell_index];
+                   BaryonField[DIINum][cell_index] = TestProblemData.DeuteriumToHydrogenRatio * BaryonField[HIINum][cell_index];
+                   BaryonField[HDINum][cell_index] = 0.75 * TestProblemData.DeuteriumToHydrogenRatio * BaryonField[H2INum][cell_index];
+                 }
+
+               } // if(TestProblemData.MultiSpecies)	
 
             } //End loop over i
          } //End loop over j

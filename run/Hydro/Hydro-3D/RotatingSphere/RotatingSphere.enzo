@@ -16,19 +16,21 @@ RightFaceBoundaryCondition = 3 3 3 # 3 = Periodic in x, 0 = reflecting in y
 
 # Hierarchy Control Parameters
 StaticHierarchy            = 0 # 0 = AMR, 1 = No AMR
-MaximumRefinementLevel     = 2
+MaximumRefinementLevel     = 6
 RefineBy                   = 2
-CellFlaggingMethod = 12
+CellFlaggingMethod = 6 7 12
+#MinimumOverDensityForRefinement = 8.0
 MustRefineRegionMinRefinementLevel = 2
-MustRefineRegionLeftEdge = -30.0 -30.0 -30.0
-MustRefineRegionRightEdge = 30.0 30.0 30.0
+MustRefineRegionLeftEdge = -15.0 -15.0 -15.0
+MustRefineRegionRightEdge = 15.0 15.0 15.0
 
 # I/O Parameters
 # dtDataDump and StopTime are set during initialization.
 StopCycle = 1000000
 InitialTime = 0.0
 StopTime = 1.0
-dtDataDump = 0.1
+dtDataDump = 0.01
+OutputFirstTimeAtLevel = 6
 DataDumpDir                = DD
 DataDumpName = DD
 OutputTemperature          = 1 
@@ -40,7 +42,8 @@ LengthUnits                = 3.08567758135e+18  # 1 pc
 TimeUnits                  = 3.15576e+14 # 10 Million years
 
 # Gravity Parameters
-SelfGravity                = 0
+SelfGravity                = 1
+
 
 # Hydrodynamic Parameters
 UseHydro                   = 1
@@ -52,7 +55,14 @@ PPMDiffusionParameter      = 0
 CourantSafetyNumber        = 0.1
 
 # Parameters for Additional Physics
-RadiativeCooling           = 1
+RadiativeCooling = 1
+MultiSpecies = 3
+
+MetalCooling = 3  #### turn on Cloudy cooling! --Set this to 0 to test.
+IncludeCloudyHeating = 0
+IncludeCloudyMMW = 0
+CloudyMetallicityNormalization = 0.018477  	  # do not change
+CloudyCoolingGridFile = solar_2008_3D_metals.h5   # use 3D file (has correct dynamic range)
 
 # Global Parameters
 tiny_number                = 1.0e-10
@@ -71,5 +81,17 @@ RotatingSphereExteriorTemperature = 200.0
 RotatingSphereSpinParameter = 0.05
 RotatingSphereAngularMomentumExponent = 0.9
 RotatingSphereUseTurbulence = 1
-RotatingSphereTurbulenceRMS = 0.4
+RotatingSphereTurbulenceRMS = 0.1
 RotatingSphereRedshift = 20.0
+
+TestProblemInitialHIFraction  = 0.998
+TestProblemInitialHIIFraction  = 0.002
+TestProblemInitialHeIFraction  = 0.999
+TestProblemInitialHeIIFraction  = 0.001
+TestProblemInitialHeIIIFraction  = 1.0e-10
+TestProblemInitialHMFraction  = 1.0e-10
+TestProblemInitialH2IFraction  = 5.0e-4
+TestProblemInitialH2IIFraction  = 1.0e-20
+
+TestProblemUseMetallicityField = 1
+TestProblemInitialMetallicityFraction = 0.022e-3  # 0.022 is solar metallicity.
