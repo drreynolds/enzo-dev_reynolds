@@ -8,24 +8,24 @@ ProblemType                = 14
 TopGridRank                = 3
 
 TopGridDimensions          = 128 128 128
-DomainLeftEdge             = -100.0 -100.0 -100.0
-DomainRightEdge            = 100.0 100.0 100.0
+DomainLeftEdge             = -200.0 -200.0 -200.0
+DomainRightEdge            = 200.0 200.0 200.0
 
-LeftFaceBoundaryCondition  = 3 3 3 # 3 = Periodic in x, 0 = reflecting in y
-RightFaceBoundaryCondition = 3 3 3 # 3 = Periodic in x, 0 = reflecting in y
+LeftFaceBoundaryCondition  = 3 3 3 # 3 = Periodic, 0 = reflecting
+RightFaceBoundaryCondition = 3 3 3 # 3 = Periodic, 0 = reflecting
+TopGridGravityBoundary = 0  # 1 = Isolated
 
 # Hierarchy Control Parameters
 StaticHierarchy            = 0 # 0 = AMR, 1 = No AMR
-MaximumRefinementLevel     = 6
+MaximumRefinementLevel     = 2
 RefineBy                   = 2
-CellFlaggingMethod = 6 7 12
+CellFlaggingMethod = 12
 #MinimumOverDensityForRefinement = 8.0
 MustRefineRegionMinRefinementLevel = 2
-MustRefineRegionLeftEdge = -15.0 -15.0 -15.0
-MustRefineRegionRightEdge = 15.0 15.0 15.0
+MustRefineRegionLeftEdge = -16.0 -16.0 -16.0
+MustRefineRegionRightEdge = 16.0 16.0 16.0
 
 # I/O Parameters
-# dtDataDump and StopTime are set during initialization.
 StopCycle = 1000000
 InitialTime = 0.0
 StopTime = 1.0
@@ -43,7 +43,6 @@ TimeUnits                  = 3.15576e+14 # 10 Million years
 
 # Gravity Parameters
 SelfGravity                = 1
-
 
 # Hydrodynamic Parameters
 UseHydro                   = 1
@@ -80,8 +79,8 @@ RotatingSphereOuterDensityExponent = 2.5
 RotatingSphereExteriorTemperature = 200.0
 RotatingSphereSpinParameter = 0.05
 RotatingSphereAngularMomentumExponent = 0.9
-RotatingSphereUseTurbulence = 1
-RotatingSphereTurbulenceRMS = 0.1
+RotatingSphereUseTurbulence = 0
+RotatingSphereTurbulenceRMS = 0.00
 RotatingSphereRedshift = 20.0
 
 TestProblemInitialHIFraction  = 0.998

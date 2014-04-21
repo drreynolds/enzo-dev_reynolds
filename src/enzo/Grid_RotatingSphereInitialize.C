@@ -2,13 +2,21 @@
 /
 /   GRID CLASS (INITIALIZE THE GRID FOR SEDOV BLAST WAVE TEST)
 /
-/   written by: Brian O'Shea
-/   date:          December 2007
+/   written by: Greg Meece
+/   date:          April 2014
 /   modified1:   
 /
-/   PURPOSE: Sets the energy in the initial explosion region, as well as
-/                setting color fields, species fields, and maybe even kinetic
-/                energy fields.
+/   PURPOSE: Sets up the grid for the RotatingSphereTestProblem. For details,
+/            see Meece 2014 in ApJ. If you are using turbulence, your run directory
+/            must include the file 'turbulence.in', which can be generated using the
+/            file 'turbulence_generatory.py', which should be in 
+/            run/Hydro/Hydro-3D/RotatingSphere
+/
+/            Note that setting up with turbulence can take a minute or so. If you are
+/            trying to initialize with a large number of grids, the initialization might
+/            take longer than you would like. There are ways around this (such as making a
+/            singleton class to hold the turbulence) which would be faster but a little more
+/            complex. Email me (meecegre@msu.edu) if you have questions.
 /
 /   RETURNS: FAIL or SUCCESS
 /
@@ -81,20 +89,26 @@ int GetUnits(float *DensityUnits, float *LengthUnits,
 const float VIRIAL_COEFFICIENT = 200.0; // Use r_200
 const float SOLAR_MASS_IN_GRAMS = 1.9891e+33;
 
-const float HUBBLE_CONSTANT_NOW = 70.0; // km/s/Mpc
-const float OMEGA_MATTER = 0.3;
-const float OMEGA_LAMBDA = 0.7;
 const float G_CGS = 6.67259e-8;
 const float AMU_CGS = 1.6605402e-24;
 const float KB_CGS = 1.380658e-16;
 const float CM_PER_KM = 1.0e5;
 const float CM_PER_MEGAPARSEC = 3.085677581e24;
 
+// Cosmological parameters, used for computing the critical density
+// and setting up the NFW halo. The setup should not be very sensitive
+// to changes in these parameters.
+const float HUBBLE_CONSTANT_NOW = 70.0; // km/s/Mpc
+const float OMEGA_MATTER = 0.3;
+const float OMEGA_LAMBDA = 0.7;
+
 // Simulation constants
+// Shouldn't need to change these unless the setup isn't working right.
 const int N_RADIAL_BINS = 2048;
+const int N_SAMPLES_PER_BIN = 10;
 const float MIN_BIN_RADIUS = 1.0e-1; // Code units
 const float MAX_BIN_RADIUS = 2.0e3; // Code units
-const float RS_INTEGRATION_INTERVAL = 1.0e-1; // Code units
+const float RS_INTEGRATION_INTERVAL = 1.0e-2; // Code units
 
 int grid::RotatingSphereInitializeGrid(float RotatingSphereNFWMass,
                                        float RotatingSphereNFWConcentration,
@@ -161,16 +175,18 @@ int grid::RotatingSphereInitializeGrid(float RotatingSphereNFWMass,
    GravitationalConstant = 4.0 * M_PI * G_CGS * DensityUnits * pow(TimeUnits, 2.0);
 
    // Set up the NFW halo.
-   float g_code;
-   g_code = G_CGS / (1.0 / (DensityUnits * pow(TimeUnits, 2.0)));
+   float g_code, nfw_mvir_code, critical_density_code, c, nfw_scale_density, nfw_scale_radius;
+   float nfw_v_circular, nfw_temp, nfw_cs;
 
-   float nfw_mvir_code = RotatingSphereNFWMass * SOLAR_MASS_IN_GRAMS / MassUnits;
-   float critical_density_code = get_critical_density(RotatingSphereRedshift);
+   g_code = G_CGS * DensityUnits * pow(TimeUnits, 2.0);
 
-   float c = RotatingSphereNFWConcentration;
+   nfw_mvir_code = RotatingSphereNFWMass * SOLAR_MASS_IN_GRAMS / MassUnits;
+   critical_density_code = get_critical_density(RotatingSphereRedshift);
 
-   float nfw_scale_density = (VIRIAL_COEFFICIENT / 3.0) * critical_density_code * pow(c, 3.0) / (log(1.0+c) - c/(1.0+c));
-   float nfw_scale_radius = nfw_mvir_code / (4.0 * M_PI * nfw_scale_density * (log(1.0+c) - (c/(1.0+c))));
+   c = RotatingSphereNFWConcentration;
+
+   nfw_scale_density = (VIRIAL_COEFFICIENT / 3.0) * critical_density_code * pow(c, 3.0) / (log(1.0+c) - c/(1.0+c));
+   nfw_scale_radius = nfw_mvir_code / (4.0 * M_PI * nfw_scale_density * (log(1.0+c) - (c/(1.0+c))));
    nfw_scale_radius = pow(nfw_scale_radius, 1.0/3.0);
 
    // These are in code units. At the end of initialization,
@@ -179,11 +195,6 @@ int grid::RotatingSphereInitializeGrid(float RotatingSphereNFWMass,
    PointSourceGravity = 2;
    PointSourceGravityConstant = 4.0 * M_PI * nfw_scale_density * pow(nfw_scale_radius, 3.0) * (log(2.0) - 0.5);
    PointSourceGravityCoreRadius = nfw_scale_radius;
-
-   float r = RotatingSphereNFWConcentration * PointSourceGravityCoreRadius;
-   float m_dm = PointSourceGravityConstant * (log(1.0 + r/PointSourceGravityCoreRadius) - (r/(r+PointSourceGravityCoreRadius))) / (log(2.0)-0.5); 
-
-   float nfw_v_circular, nfw_temp, nfw_cs;
 
    nfw_v_circular = sqrt(g_code * nfw_mvir_code / (nfw_scale_radius * c));
    nfw_cs = nfw_v_circular * sqrt(Gamma/2.0);
@@ -196,6 +207,7 @@ int grid::RotatingSphereInitializeGrid(float RotatingSphereNFWMass,
     */
 
    float bin_left_edge[N_RADIAL_BINS];
+   float bin_right_edge[N_RADIAL_BINS];
    float bin_center[N_RADIAL_BINS];
    float bin_density[N_RADIAL_BINS];
    float bin_temperature[N_RADIAL_BINS];
@@ -208,9 +220,9 @@ int grid::RotatingSphereInitializeGrid(float RotatingSphereNFWMass,
    float bin_step = (log_r_max - log_r_min) / (float)(N_RADIAL_BINS);
    float this_bin_log_radius = log_r_min;
 
-
    for (int i = 0; i < N_RADIAL_BINS; i++) {
       bin_left_edge[i] = pow(10.0, this_bin_log_radius);
+      bin_right_edge[i] = pow(10.0, this_bin_log_radius + bin_step);
       bin_center[i] = 0.5 * (pow(10.0, this_bin_log_radius) + pow(10.0, this_bin_log_radius + bin_step));
       this_bin_log_radius += bin_step;
       }
@@ -219,32 +231,45 @@ int grid::RotatingSphereInitializeGrid(float RotatingSphereNFWMass,
 
    // Set the density.
    for (int i = 0; i < N_RADIAL_BINS; i++) {
-      bin_density[i] = get_gas_density(bin_center[i],
-                                       RotatingSphereCoreRadius,
-                                       RotatingSphereCentralDensity,
-                                       RotatingSphereCoreDensityExponent,
-                                       RotatingSphereOuterDensityExponent,
-                                       RotatingSphereRedshift);
+      float dens_sum = 0.0;
+      float rad;
+
+      for (int s = 0; s < N_SAMPLES_PER_BIN; s++) {
+         rad = bin_left_edge[i] + (bin_right_edge[i] - bin_left_edge[i]) * (float)s/((float)N_SAMPLES_PER_BIN);
+         dens_sum += get_gas_density(rad,
+                                     RotatingSphereCoreRadius,
+                                     RotatingSphereCentralDensity,
+                                     RotatingSphereCoreDensityExponent,
+                                     RotatingSphereOuterDensityExponent,
+                                     RotatingSphereRedshift);
+         }
+
+      bin_density[i]  = dens_sum / (float)N_SAMPLES_PER_BIN;
       }
 
    printf("Done setting up the density.\n");
 
    // Set the temperature
    for (int i = 0; i < N_RADIAL_BINS; i++) {
-      bin_temperature[i] = get_gas_temperature(bin_center[i],
-                                               RotatingSphereCoreRadius,
-                                               RotatingSphereCentralDensity,
-                                               RotatingSphereCoreDensityExponent,
-                                               RotatingSphereOuterDensityExponent,
-                                               RotatingSphereRedshift,
-                                               RotatingSphereExternalTemperature);
+      float temp_sum = 0.0;
+      float rad;
+
+      for (int s = 0; s < N_SAMPLES_PER_BIN; s++) {
+        rad = bin_left_edge[i] + (bin_right_edge[i] - bin_left_edge[i]) * (float)s/((float)N_SAMPLES_PER_BIN);
+        temp_sum += get_gas_temperature(rad,
+                                         RotatingSphereCoreRadius,
+                                         RotatingSphereCentralDensity,
+                                         RotatingSphereCoreDensityExponent,
+                                         RotatingSphereOuterDensityExponent,
+                                         RotatingSphereRedshift,
+                                         RotatingSphereExternalTemperature);
+         }
+      bin_temperature[i] = temp_sum / (float) N_SAMPLES_PER_BIN;
       }
 
    printf("Done setting up the temperature.\n");
 
    // Set up the rotation.
-   printf("Setting up rotation- this could take a second.\n");
-
    float* mass_energy;
    float r_sphere = RotatingSphereCoreRadius * pow(RotatingSphereCentralDensity / get_critical_density(RotatingSphereRedshift), 1.0 / RotatingSphereOuterDensityExponent);
 
@@ -383,7 +408,7 @@ int grid::RotatingSphereInitializeGrid(float RotatingSphereNFWMass,
          turbulence_field_vz[z][y][x] = vz;
          }
       
-      printf("Finished reading in turbulence.\n");
+      printf("Done reading in turbulence.\n");
 
       // Normalize the turbulent field so that the RMS velocity
       // is some fraction of the halo sound speed.
@@ -426,9 +451,12 @@ int grid::RotatingSphereInitializeGrid(float RotatingSphereNFWMass,
       delete [] pert_dim_y_s;
       delete [] pert_dim_z_s;
 
+      printf("Finished reading in turbulence.\n");
       } // End if RotatingSphereUseTurbulence
 
    // Set grid values.
+   printf("Setting grid values. This might take a minute.\n");
+
    int cell_index, bin_index;
    float x, y, z;
    float radius, radius_in_plane;
@@ -592,6 +620,8 @@ int grid::RotatingSphereInitializeGrid(float RotatingSphereNFWMass,
       delete[] turbulence_field_vz;
       }
 
+   printf("All finished initializing this grid.\n");
+
    // Done with initialization
    if(debug){
       printf("Exiting RotatingSphereInitialize\n");
@@ -650,7 +680,7 @@ float get_drhodr(float r, float core_radius, float core_density, float core_expo
    critical_density = get_critical_density(redshift);
 
    if (density > critical_density) {
-      return (core_density / core_radius)
+      return -(core_density / core_radius)
             * pow(r_hat, -core_exponent) * pow(1.0 + r_hat, core_exponent - outer_exponent)
             * (core_exponent / r_hat + (outer_exponent - core_exponent) / (1.0 + r_hat));
       }
@@ -685,7 +715,7 @@ float get_gas_temperature(float r, float core_radius, float core_density, float 
    core_boundary_temperature = exterior_temperature * pow(core_outer_density / critical_density, Gamma - 1.0);
 
    if (r < core_radius) {
-      return integrate_temperature(core_radius, r, core_boundary_temperature, 1.0e-2*core_radius, core_radius, core_density, core_exponent, outer_exponent, redshift, exterior_temperature);
+      return integrate_temperature(core_radius, r, core_boundary_temperature, RS_INTEGRATION_INTERVAL, core_radius, core_density, core_exponent, outer_exponent, redshift, exterior_temperature);
       }
 
    // Outside of the core, temperature increases adiabatically
@@ -741,15 +771,15 @@ float integrate_temperature(float r1, float r2, float T1, float dr, float core_r
  * Returns:
  *    y(t+dt)
  */
-float rk4(float (*dydt)(float r, float T, float core_radius, float core_density, float core_exponent, float outer_exponent, float redshift, float exterior_temperature), float y, float t, float dt, float core_radius, float core_density, float core_exponent, float outer_exponent, float redshift, float exterior_temperature) {
+float rk4(float (*dydt)(float r, float T, float core_radius, float core_density, float core_exponent, float outer_exponent, float redshift, float exterior_temperature), float T, float r, float dr, float core_radius, float core_density, float core_exponent, float outer_exponent, float redshift, float exterior_temperature) {
    float k1, k2, k3, k4;
 
-   k1 = (*dydt)(t, y, core_radius, core_density, core_exponent, outer_exponent, redshift, exterior_temperature);
-   k2 = (*dydt)(t + 0.5*dt, y + 0.5*dt * k1, core_radius, core_density, core_exponent, outer_exponent, redshift, exterior_temperature);
-   k3 = (*dydt)(t + 0.5*dt, y + 0.5*dt * k2, core_radius, core_density, core_exponent, outer_exponent, redshift, exterior_temperature);
-   k4 = (*dydt)(t + dt, y + dt * k3, core_radius, core_density, core_exponent, outer_exponent, redshift, exterior_temperature);
+   k1 = (*dydt)(r, T, core_radius, core_density, core_exponent, outer_exponent, redshift, exterior_temperature);
+   k2 = (*dydt)(r + 0.5*dr, T + 0.5*dr * k1, core_radius, core_density, core_exponent, outer_exponent, redshift, exterior_temperature);
+   k3 = (*dydt)(r + 0.5*dr, T + 0.5*dr * k2, core_radius, core_density, core_exponent, outer_exponent, redshift, exterior_temperature);
+   k4 = (*dydt)(r + dr, T + dr * k3, core_radius, core_density, core_exponent, outer_exponent, redshift, exterior_temperature);
 
-   return y + dt * (k1 + 2.0*k2 + 2.0*k3 + k4)/6.0;
+   return T + dr * (k1 + 2.0*k2 + 2.0*k3 + k4)/6.0;
 }
 
 /* Radial derivative of the temperature
@@ -789,7 +819,7 @@ float dTdr(float r, float T, float core_radius, float core_density, float core_e
    grav_accel = get_grav_accel(r);
    drhodr =  get_drhodr(r, core_radius, core_density, core_exponent, outer_exponent, redshift);
 
-   return -(1.0 / density) * (Mu * amu_code * density * grav_accel / kb_code + T * drhodr);
+   return (1.0 / density) * (Mu * amu_code * density * grav_accel / kb_code - T * drhodr);
 }
 
 /* Get the gravitational acceleration at radius r due to the dark matter.
@@ -815,13 +845,13 @@ float get_grav_accel(float r) {
 
    // Calculate G (in cm^3 g^-1 s^-2) code units
    float g_code;
-   g_code = G_CGS / (1.0 / (DensityUnits * pow(TimeUnits, 2.0)));
+   g_code = G_CGS * DensityUnits * pow(TimeUnits, 2.0);
 
    dm_mass = PointSourceGravityConstant
-             * ((log(1.0 + r / PointSourceGravityCoreRadius) - r / (r + PointSourceGravityCoreRadius))
-                / (log(2.0) - 0.5));
+             * (log(1.0 + r / PointSourceGravityCoreRadius) - r / (r + PointSourceGravityCoreRadius))
+                / (log(2.0) - 0.5);
 
-   return g_code * dm_mass / pow(r, 2.0);
+   return -g_code * dm_mass / pow(r, 2.0);
 }
 
 /* Computes the critical density of the universe at a given redshift.
@@ -875,16 +905,15 @@ float* integrate_mass_energy(float r_final,
 
    float* mass_energy = new float[3];
 
-   mass_energy[0] = 0.0;
-   mass_energy[1] = 0.0;
-   mass_energy[2] = 0.0;
+   mass_energy[0] = (4.0 * M_PI * core_density) * pow(r, 3.0) * pow(r/core_radius, -core_exponent) / (3.0 - core_exponent);
+   mass_energy[1] = PointSourceGravityConstant * (log((r + PointSourceGravityCoreRadius) / PointSourceGravityCoreRadius) - r / (r+PointSourceGravityCoreRadius)) / (log(2) - 0.5);
+   mass_energy[2] = 0.0; // Not important
 
    while(r < r_final) {
       if (r + dr > r_final)
          dr = r_final - r;
 
       mass_energy_rk4(r, &mass_energy_derivs, mass_energy, core_radius, core_density, core_exponent, outer_exponent, redshift, dr);
-      //printf("mass_energy[1] / m_dm: %e\n", mass_energy[1] / m_dm);
       r += dr;
       }
 
@@ -990,9 +1019,6 @@ void mass_energy_rk4(float r,
 
    delete [] temp_derivs;
 
-   //printf("k1[0], k2[0], k3[0], k4[0]: %e %e %e %e\n", k1[0], k2[0], k3[0], k4[0]);
-   //printf("k1[1], k2[1], k3[1], k4[1]: %e %e %e %e\n", k1[1], k2[1], k3[1], k4[1]);
-
    // Compute the new value of the masses and energies.
    mass_energy[0] += (1.0/6.0) * dr * (k1[0] + 2.0 * k2[0] + 2.0 * k3[0] + k4[0]);
    mass_energy[1] += (1.0/6.0) * dr * (k1[1] + 2.0 * k2[1] + 2.0 * k3[1] + k4[1]);
@@ -1031,7 +1057,7 @@ float* mass_energy_derivs(float r,
 
    // Calculate G (in cm^3 g^-1 s^-2) code units
    float g_code;
-   g_code = G_CGS / (1.0 / (DensityUnits * pow(TimeUnits, 2.0)));
+   g_code = G_CGS * DensityUnits * pow(TimeUnits, 2.0);
 
    // Calculate the dark matter density at r
    float dm_scale_density, rho_dm, r_hat;
