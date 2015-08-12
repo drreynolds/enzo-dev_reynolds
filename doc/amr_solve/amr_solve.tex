@@ -1,0 +1,1157 @@
+\documentclass[letterpaper,10pt]{article}
+\usepackage{geometry}   % See geometry.pdf to learn the layout
+                        % options.  There are lots.
+\usepackage[latin1]{inputenc}
+\usepackage{graphicx}
+\usepackage{epstopdf}
+\usepackage{amsmath,amsfonts,amssymb}
+
+\usepackage{thumbpdf}   
+\usepackage[usenames,pdftex]{color} % black,white,red,green,blue,cyan,magenta,yellow
+\pdfcompresslevel=1  
+\def\myfig#1#2{\pdfimage height #2 {#1.pdf}}
+\def\myfigpdf#1#2{\pdfimage height #2 {#1.pdf}}
+\def\myfigpng#1#2{\pdfimage height #2 {#1.png}}
+
+\DeclareGraphicsRule{.tif}{png}{.png}{`convert #1 `dirname #1`/`basename #1 .tif`.png}
+
+\renewcommand{\(}{\left(}
+\renewcommand{\)}{\right)}
+\newcommand{\vb}{{\bf v}_b}
+\newcommand{\xvec}{{\bf x}}
+\newcommand{\Omegabar}{\bar{\Omega}}
+\newcommand{\rhob}{\rho_b}
+\newcommand{\dt}{\Delta t}
+\newcommand{\dx}{\Delta x}
+\newcommand{\Eot}{E^{OT}}
+\newcommand{\Ef}{E_f}
+\newcommand{\sighat}{\hat{\sigma}}
+\newcommand{\Fnu}{{\bf F}_{\nu}}
+\newcommand{\Pnu}{\overline{\bf P}_{\nu}}
+\newcommand{\R}{I\!\!R}
+\newcommand{\Rthree}{\R^3}
+\newcommand{\eh}{e_h}
+\newcommand{\ec}{e_c}
+\newcommand{\Edd}{\mathcal F}
+\newcommand{\Eddnu}{\Edd_{\nu}}
+\newcommand{\mn}{{\tt n}}
+\newcommand{\mB}{\mathcal B}
+\newcommand{\mC}{{\mathcal C}}
+\newcommand{\mL}{{\mathcal L}}
+\newcommand{\mD}{{\mathcal D}}
+\newcommand{\mDnu}{\mD_{\nu}}
+\newcommand{\mCnu}{\mC_{\nu}}
+\newcommand{\mLnu}{{\mathcal L}_{\nu}}
+\newcommand{\mCe}{\mC_e}
+\newcommand{\mLe}{\mL_e}
+\newcommand{\mCn}{\mC_{\mn}}
+\newcommand{\mLn}{\mL_{\mn}}
+\newcommand{\amrsolve}{{\tt AMRSolve} }
+\newcommand{\enzo}{{\tt Enzo} }
+\newcommand{\hypre}{{\tt HYPRE} }
+\newcommand{\cpp}{{\tt C++} }
+
+
+\textheight 9truein
+\textwidth 6.5truein
+\addtolength{\oddsidemargin}{-0.25in}
+\addtolength{\evensidemargin}{-0.25in}
+\addtolength{\topmargin}{-0.5in}
+\setlength{\parindent}{0em}
+\setlength{\parskip}{2ex}
+
+
+\author{Daniel R. Reynolds and James O. Bordner}
+\title{\amrsolve User Guide}
+
+
+\begin{document}
+\maketitle
+
+\section{Introduction}
+\label{sec:intro}
+
+The \amrsolve package is an \enzo add-on that strives to achieve two
+goals: (a) provide a smoother approach for iteration over grids in an
+\enzo AMR hierarchy, both within and between levels, and within and
+between MPI tasks, and (b) to provide a straightforward interface for
+defining linear systems on block-structured adaptive mesh hierarchies
+and solving them using iterative linear solvers provided by the \hypre
+solver library.  The first of these alone allows \amrsolve to
+significantly benefit \enzo development of new physics modules that
+require inter-grid communication, if only due to the ease of
+development.  However, the combination of the two goals of \amrsolve
+has allowed us to construct two \enzo solvers for implicit systems
+defined on AMR grids: self-gravity and flux-limited-diffusion
+radiation transport.
+
+In this user guide, we first provide a brief overview of the \amrsolve
+package structure, including a description of its suite of \cpp
+classes and iterators.  We then focus on the self-gravity solver, 
+{\tt AMRGravitySolve}. We will conclude with a discussion of the FLD
+radiation transport solver, {\tt AMRFLDSplit}. 
+
+
+\section{\amrsolve}
+\label{sec:amrsolve}
+
+The \amrsolve package contains a relatively large number of classes,
+providing a range of utilities from description of the \enzo scalar
+type to MPI communicator wrappers, to HYPRE solver interfaces.  All
+\amrsolve package routines are held in the \enzo directory 
+{\tt src/enzo/}.  We discuss each of
+these \cpp classes below, focusing more on those utilities that
+interface most closely with \enzo.
+\begin{itemize}
+\item {\tt AMRsolve\_Domain} -- small class containing the problem
+  dimensionality and root-grid extents.
+\item {\tt AMRsolve\_Hierarchy} -- this class represents {\tt Enzo}'s
+  AMR hierarchy.  However, unlike the \enzo hierarchy structures, this
+  class comes with friend classes that provide an invaluable set of
+  iterators throughout the hierarchy:
+  \begin{itemize}
+  \item {\tt ItHierarchyGridsLocal} -- iterator class for visiting all
+    task-local grids within an \\
+    {\tt AMRsolve\_Hierarchy} object.
+  \item {\tt ItHierarchyGridsAll} -- iterator class for visiting all
+    grids within an {\tt AMRsolve\_Hierarchy} object (akin to the
+    linked-list iteration type through the \enzo hierarchy).
+  \item {\tt ItHierarchyLevels} -- iterator class for visiting all
+    levels in an an {\tt AMRsolve\_Hierarchy} object, running from
+    coarsest to finest.
+  \end{itemize}
+  An {\tt AMRsolve\_Hierarchy} object is set up within \enzo by
+  ``attaching'' it to an \enzo {\tt LevelArray}.  There are currently
+  two such routines, one for gravity problems 
+  ({\tt enzo\_attach\_grav}) and the other for radiation problems 
+  ({\tt enzo\_attach\_fld}).  Upon solution of the necessary
+  gravity/radiation problem, the {\tt AMRsolve\_Hierarchy} object may
+  be detached from enzo via the {\tt enzo\_detach} routine, allowing
+  for adaptivity of the mesh before re-attachment.
+\item {\tt AMRsolve\_Level} -- small class for encapsulating a single
+  level of an AMR hierarchy.  Again, the true utility in this class is
+  it's friend class iterators:
+  \begin{itemize}
+  \item {\tt ItLevelGridsLocal} -- iterator class for visiting all
+    task-local grids in an {\tt AMRsolve\_Level} object.
+  \item {\tt ItLevelGridsAll} -- iterator class for visiting all
+    grids in an {\tt AMRsolve\_Level} object.
+  \end{itemize}
+\item {\tt AMRsolve\_Grid} -- class for representing a grid patch in
+  an AMR hierarchy.  Each grid is an orthogonal grid of zones in d
+  dimensions.  These grids contain a small amount of data for
+  interfacing with \hypre solvers, as well as descriptors of the
+  corresponding \enzo grid object.  However, these grids do store
+  pointers to some of the corresponding \enzo data fields that are
+  used in solving up gravity and radiation problems.  The true benefit
+  of this class is not to merely reproduce a descriptor of each \enzo
+  grid object; instead it comes from the suite of associated
+  iterators, that obviate the need to iterate over a full hierarchy to
+  determine inter-grid relationships:
+  \begin{itemize}
+  \item {\tt id\_parent\_} -- this member points to the parent {\tt
+    AMRsolve\_Grid}.
+  \item {\tt ItGridNeighbors} -- this class iterates over all
+    neighboring grids of an {\tt AMRsolve\_Grid}.
+  \item {\tt ItGridChildren} -- this class iterates over all child
+    grids of an {\tt AMRsolve\_Grid}.
+  \end{itemize}
+\item {\tt AMRsolve\_Faces} -- each {\tt AMRsolve\_Grid} object has a
+  corresponding {\tt AMRsolve\_Faces} object, that identifies what the
+  boundaries of the grid are adjacent to (e.g.~coarser cells, finer
+  cells, external boundary).
+\item {\tt AMRsolve\_Mpi} -- small wrapper class containing the MPI
+  communicator, communicator size, and MPI task index.
+\item {\tt AMRsolve\_Parameters} -- small class for storing and
+  accessing run-time parameters using key-value pairs.
+\item {\tt AMRsolve\_Point} -- small class for representing point
+  masses (used in some self-gravity tests).
+\item {\tt AMRsolve\_Problem} -- small class for setting up
+  self-gravity test problems.
+\item {\tt AMRsolve\_scalar.h} -- file to define a 'Scalar' type (as
+  opposed to re-defining 'float').
+\item {\tt AMRsolve\_Hypre\_Grav} -- class for interfacing between the
+  \enzo routine {\tt AMRGravitySolve} and \hypre, to perform scalable,
+  self-consistent self-gravity solves over a full AMR hierarchy.  This
+  will be discussed in further detail in Section
+  \ref{sec:AMRGravitySolve}.
+\item {\tt AMRsolve\_Hypre\_FLD} -- class for interfacing between the
+  \enzo class {\tt AMRFLDSplit} and \hypre, to perform scalable,
+  self-consistent flux-limited-diffusion radiation transport solves
+  over a full AMR hierarchy.  This will be discussed in further detail
+  in Section \ref{sec:AMRFLDSplit}.
+\item {\tt AMRsolve\_HG\_Prec} -- class to provide a
+  ``hierarchical-grid'' preconditioner for fully implicit linear
+  systems posed on block-structured AMR meshes.  This preconditioner
+  is designed to be plugged into a \hypre iterative linear solver,
+  such as BiCGStab or GMRES, and aids in constructing a scalable
+  solver for elliptic (gravity) or parabolic (FLD) linear systems.
+\end{itemize}
+In order to use the \amrsolve infrastructure (and it's associated
+solvers), both of the compile-time options {\tt AMR\_SOLVE} and 
+{\tt USE\_HYPRE} must be enabled.
+
+
+\section{The {\tt AMRGravitySolve} Routine}
+\label{sec:AMRGravitySolve}
+
+The {\tt AMRGravitySolve} routine provides an \enzo interface to the
+{\tt AMRsolve\_Hypre\_Grav} class within {\tt AMRSolve}.  As with the
+existing split gravity solver ({\tt CommunicationSolvePotential})
+within \enzo, {\tt AMRGravitySolve} is called within 
+{\tt PrepareDensityField}.
+
+When using {\tt AMRGravitySolve}, the self-gravity equation
+\begin{equation}
+\label{eq:self_gravity}
+  \nabla^2 \phi = \frac{4\pi G}{a}(\rho_b + \rho_{dm} + <\!\!\rho_0\!\!>)
+\end{equation}
+is set up and solved over the AMR hierarchy defined from the root grid
+level to the level input to the {\tt PrepareDensityField} function.
+Since {\tt PrepareDensityField} is called within {\tt EvolveLevel},
+i.e.~on each level in the AMR hierarchy, then {\tt AMRGravitySolve}
+will be called on successively deeper or shallower AMR hierarchies as
+the W-cycle through the levels is traversed.  The Laplacian is
+discretized using a standard second-order accurate finite difference
+approximation within each grid patch, with piecewise-constant
+interpolation to bridge coarse-fine interface boundaries.
+
+In solving the system \eqref{eq:self_gravity}, {\tt AMRGravitySolve}
+will use one of three solver algorithms: GMRES, BiCGStab, or FAC.  The
+first two of these are Krylov iterative solver algorithms, while the
+third is a multigrid variant called the ``Fast Adaptive Composite''
+method \cite{McCormick1989}.  Of these three methods, only BiCGStab
+and GMRES are recommended, as the FAC algorithm seems less robust.
+
+When using either of the Krylov linear solvers, the linear system may
+be preconditioned using the multigrid-like hierarchical grid
+preconditioner defined by the \amrsolve class {\tt AMRsolve\_HG\_Prec}
+mentioned above.  
+
+The available input parameters that control the behavior of 
+{\tt AMRGravitySolve}, with available options specified in \{\}, and
+the default value specified in [], include:
+\begin{itemize}
+\item {\tt SelfGravityConsistent} \{0, 1\; [0]\} -- choice between
+  {\tt CommunicationSolvePotential} (0) and \\
+  {\tt AMRGravitySolve} (1) within {\tt PrepareDensityField.C};
+\item {\tt AMRGravitySolve\_solver} \{0, 1, 2\; [0]\} -- choice of
+  linear solver algorithm, where 1 is GMRES, 2 is FAC, 0 is BiCGStab;
+\item {\tt AMRGravitySolve\_maxit} \{$>0$\; [200]\} -- maximum number
+  of iterations allowed by linaer solver;
+\item {\tt AMRGravitySolve\_useprec} \{0, 1\; [1]\} -- flag to enable
+  the {\tt AMRsolve\_HG\_Prec} preconditioner;
+\item {\tt AMRGravitySolve\_precmaxit} \{$>0$\; [1]\} -- maximum
+  number of preconditioning iterations when using 
+  {\tt AMRsolve\_HG\_Prec};
+\item {\tt AMRGravitySolve\_restol} \{$\ge 0.0$\; [0.0]\} -- relative
+  linear residual tolerance for preconditioner system (0.0 disables
+  the residual check, forcing a fixed number of iterations);
+\item {\tt AMRGravitySolve\_Jaciters} \{$>0$\; [3]\} -- internal
+  number of Jacobi smoothing iterations that preconditioner applies to
+  the full AMR hierarchy;
+\item {\tt AMRGravitySolve\_rlxtype} \{0, 1, 2, 3\; [2]\} -- choice of 
+  relaxation method for inner multigrid solver within preconditioner
+  (Jacobi 0, weighted Jacobi 1, symmetric red/black Gauss-Seidel 2,
+  nonsymmetric red/black Gauss-Seidel 3);
+\item {\tt AMRGravitySolve\_npre} \{$>0$\; [2]\} -- number of pre- and
+  post-smoothing relaxation iterations applied in the inner multigrid
+  solver within preconditioner. 
+\end{itemize}
+
+
+
+
+
+\subsection{{\tt AMRGravitySolve} Results}
+\label{sec:AMRGravitySolve_results}
+
+We have investigated the {\tt AMRGravitySolve} solver for both
+accuracy and efficiency using a modification of the built-in \enzo
+test {\tt AMRGravityTest}.  This test problem is constructed using a
+dark-matter only simulation, consisting of a single very massive
+particle near the center of the computational domain, surrounded by a
+large number of very light, randomly placed particles.  The potential
+field is then calculated using either of the built-in \enzo gravity
+solvers, and the gravitational acceleration is calculated on each
+particle and compared against the semi-analytical radial and
+tangential forces that should arise from a $r^{-2}$ potential law.
+Plots of results computed using both the original FFT-based gravity
+solver and the {\tt AMRGravitySolve} solver are shown in Figure
+\ref{fig:AMRGravityTest_results}. 
+
+\begin{figure}[h]
+\[
+  \centerline{\myfigpng{GravityTest_orig}{2.5in}
+    \myfigpng{GravityTest_new}{2.5in} }
+\]
+\caption{Test results using original (left) gravity solver and 
+  {\tt AMRGravitySolve} (right).  Both tests use 10000 particles on a
+  $64^3$ grid.  The RMS error for both tests is
+  0.0755 and 0.0732, respectively, and appears to arise from reduced
+  error at the coarse-fine grid boundary seen at approximately $r=4$.} 
+\label{fig:AMRGravityTest_results}
+\end{figure}
+
+Similarly, we have constructed a parallel version of this test for
+investigation of weak scaling, entitled 
+{\tt AMRGravity\_weak\_scaling}.  This test is similar to 
+{\tt AMRGravityTest}, but here each processor initializes a single
+heavy particle and a large number of randomly-placed light particles
+within it's root-grid processor tile.  While the test problem no
+longer admits a simple semi-analytical solution, it does allow
+parallel tests with an AMR hierarchy of a specified depth.  The test
+does not initialize a static hierarchy, but instead initializes only
+the root grid and enables adaptive mesh refinement.  We use a
+refinement factor of 2 between levels, and refine at each level
+geometrically to ensure that each refinement level contains the same
+total number of cells as its parent level.  We ran tests of this
+solver using AMR depths ranging from 1 through 9 levels, and processor
+counts $p=k^3, k=1,\ldots,7$ (from 1 to 343 processors).  Each test
+was performed for 8 root-grid time steps, to ensure that AMR
+refinement had proceeded fully to the finest level, and timing
+statistics were taken for only the final gravity solve in this time
+step.  These tests were performed using both an un-preconditioned
+BiCGStab linear solver for the gravity system, and a BiCGStab solver
+preconditioned using the {\tt AMRsolve\_HG\_Prec} class (HG prec.).
+Unfortunately, the un-preconditioned solver was unable to converge
+within a maximum allowed 5000 iterations for the two deepest
+hierarchies (8 and 9 levels, respectively), so results from those
+tests are omitted.
+
+In figure \ref{fig:AMRGravity_weak_scaling_results1} we plot the total
+solution time versus processor count for each AMR depth, to
+demonstrate the weak-scaling performance of the solvers.  As is
+clearly evident in these plots, after an expected increase in solution
+time when going from 1 to 8 processes, the total solution time for
+each hierarchy depth remains relatively flat, increasing at the
+optimal $O(log p)$ rate indicative of multigrid solvers, with the
+HG-preconditioned results uniformly outperforming the
+un-preconditioned solver.
+
+\begin{figure}[h]
+\[
+  \centerline{\myfigpdf{scaling_np}{2.5in}
+    \myfigpdf{scaling_p}{2.5in} }
+\]
+\caption{Weak scaling results using an un-preconditioned (left) and
+  HG-preconditioned (right) gravity solver.  Curves are shown for
+  differening AMR hierarchy depths, and indicate near-optimal weak
+  scaling as the parallelism is increased, after an expected run-time
+  increase when transitioning from serial (1 process) to parallel (8
+  processes).  Additionally, the benefit from preconditioning is
+  clearly evident, with curves on the right plot uniformly lower than
+  corresponding curves on the left.} 
+\label{fig:AMRGravity_weak_scaling_results1}
+\end{figure}
+
+Similarly, in figure \ref{fig:AMRGravity_weak_scaling_results2} we
+plot the average solution time per computational cell as levels are
+added to the AMR hierarchy, for a variety of different processor
+counts.  The solution time increase when going from 1 to 2 levels may
+be easily understood due to the sudden increase in computational
+infrastructure required when going from a uniform to an adaptive
+mesh.  Moreover, in these plots the benefit of the HG preconditioner
+is more obvious due to the significantly flatter curves in the plot at
+the right.  However, it is also clear that the efficacy of the HG
+preconditioner reduces for deeper AMR hierarchies, seen here through
+the increase when going deeper than 7 levels of refinement.  From
+these plots, it is evident that additional research is needed to
+construct a preconditioner for deep AMR runs.
+
+\begin{figure}[h]
+\[
+  \centerline{\myfigpdf{timing_np}{2.5in}
+    \myfigpdf{timing_p}{2.5in} }
+\]
+\caption{Results showing average solution per computational cell as
+  the mesh is refined.  The un-preconditioned BiCGStab solver is shown
+  at left, and the HG-preconditioned solver at right, with curves
+  shown for runs using differing processor counts.  Note the much
+  flatter curves when using the HG-preconditioner, at least through 7
+  levels of mesh refinement, notwithstanding the expected increase
+  when transitioning from unigrid (1 level) to AMR (2 levels).  Note:
+  without preconditioning the solver could no longer converge within a
+  maximum allowed 5000 iterations when using 8- and 9-level hierarchies.}
+\label{fig:AMRGravity_weak_scaling_results2}
+\end{figure}
+
+
+
+
+
+\section{The {\tt AMRFLDSplit} Class}
+\label{sec:AMRFLDSplit}
+
+As with the {\tt AMRGravitySolve} routine, the {\tt AMRFLDSplit}
+class implements an \enzo interface to the \\
+{\tt AMRsolve\_Hypre\_FLD} class.  As with the variety of other
+radiation transport solvers within \enzo, {\tt AMRFLDSplit} is called
+near the beginning of {\tt EvolveLevel}, and is enabled through the
+{\tt TRANSFER} compile-time option.
+
+We note that in order to use the {\tt AMRFLDSplit} class, the
+following {\tt BaryonField}s must exist within the \enzo grids:
+\begin{itemize}
+\item {\tt RadiationFreq0} -- contains the
+  frequency-integrated radiation field,
+\item {\tt Emissivity0} -- contains the emissivity field that
+  acts as the source of ionizing photons for the radiation field,
+\item {\tt HIDensity} -- used to calculate the opacity of
+  each grid cell,
+\item {\tt kphHI} -- used to temporarily hold the old radiation field
+  during the radiation solve, and afterwards is used to communicate HI
+  photo-ionization rates to {\tt Enzo}'s chemistry routines,
+\item {\tt PhotoGamma} -- used to temporarily hold the opacity field
+  during the radiation solve, and afterwards is used to communicate
+  photo-heating rates to {\tt Enzo}'s cooling routines.
+\end{itemize}
+In other words, the {\tt AMRFLDSplit} class assumes that it will only
+be used in simulations that at a minimum include Hydrogen chemistry.
+Optionally, if Helium chemistry is also present, the {\tt AMRFLDSplit}
+class will interact with the \enzo grids' {\tt BaryonField}s:
+\begin{itemize}
+\item {\tt HeIDensity} -- used in computing the opacity of each grid cell,
+\item {\tt HeIIDensity} -- used in computing the opacity of each grid cell,
+\item {\tt kphHeI} -- used to communicate HeI photo-ionization rates to
+  {\tt Enzo}'s chemistry routines,
+\item {\tt kphHeII} -- used to communicate HeI photo-ionization rates to
+  {\tt Enzo}'s chemistry routines.
+\end{itemize}
+Lastly, since the radiation fields evolved by {\tt AMRFLDSplit} do not
+include frequencies below $\nu_{HI}$, the \enzo baryon field 
+{\tt kdissH2I} is always set to 0.  It is only accessed if the \enzo
+input parameter {\tt MultiSpecies} is greater than 1.
+
+
+
+
+\subsection{Input Parameters}
+\label{sec:AMRFLDSplit_parameters}
+
+In addition to compiling \enzo to enable the \amrsolve framework and
+the \hypre linear solver library, there are a small number of
+input parameters required to enable the {\tt AMRFLDSplit} class.
+These are separated into two groups, one set of parameters resides in
+the main \enzo parameter file, and another set may reside in a
+separate FLD-specific parameter file.  First, the arguments that go in
+the main \enzo parameter file are primarily used to inform \enzo in
+how to to enable and use {\tt AMRFLDSplit}.  The allowed parameters
+when using {\tt AMRFLDSplit} are specified in \{\}:
+\begin{itemize}
+\item {\tt RadiativeTransferFLD} \{2\} -- this informs \enzo to run the
+  FLD module as a stand-alone solver (other configurations have it
+  work with the ray-tracing solver);
+\item {\tt ImplicitProblem} \{6\} -- this informs \enzo to use {\tt
+  AMRFLDSplit} as opposed to the other (unigrid) FLD solvers;
+\item {\tt RadiativeTransferFLDCallOnLevel} \{$\ge 0$\; [0]\} -- this
+  specifies the level on which to call {\tt AMRFLDSplit} (see section
+  \ref{sec:AMRFLDSplit_hierarchy}); 
+\item {\tt RadiativeTransferOpticallyThinH2} \{0\} -- this enables H2
+  cooling for Lyman-Werner radiation (requires {\tt
+    RadiativeTransferFLD} set to 1), so should be disabled when
+  running FLD as a stand-alone radiation solver;
+\item {\tt MultiSpecies} \{0, 1\} -- this enables {\tt Enzo}'s chemistry
+  solvers;
+\item {\tt RadiativeCooling} \{0, 1\} -- this enables {\tt Enzo}'s gas
+  cooling solvers;
+\item {\tt RadHydroParamfile} -- this should specify a filename
+  (relative to the runtime directory) that contains FLD-specific
+  solver parameters (see below).  This can be the name of this same
+  file, or it can specify a different file.
+\end{itemize}
+
+The second (and larger) set of parameters control the inner workings
+of the {\tt AMRFLDSplit} solver.  All parameters have a recommended
+default value shown in [], but may be overridden by the user: 
+\begin{itemize}
+\item {\tt RadHydroESpectrum} \{-1, 0, 1\; [1]\} -- choice of assumed
+  radiation spectrum (see section \ref{sec:AMRFLDSplit_spectrum});
+\item {\tt RadHydroModel} \{1, 4\; [1]\} -- choice of isothermal (4)
+  vs temperature-dependent (1) chemistry rates;
+\item {\tt RadHydroChemistry} \{1, 3\; [1]\} -- choice of
+  Hydrogen+Helium (3) or Hydrogen-only (1) chemistry model;
+\item {\tt RadHydroMaxDt} \{$>0$\; [$\infty$]\} -- maximum allowed radiation
+  time step size (in internal, i.e.~normalized, \enzo units);
+\item {\tt RadHydroMinDt} \{$\ge 0$\; [0.0]\} -- minimum allowed
+  radiation time step size (in normalized units);
+\item {\tt RadHydroInitDt} \{$>0$\; [$\infty$]\} -- initial radiation time
+  step size (in normalized units, will be limited by main \enzo time
+  step size);
+\item {\tt RadHydroDtControl} \{0, 1, 2\; [2]\} -- choice of time step
+  adaptivity algorithm (I is 0, PI is 1, PID is 2; see section
+  \ref{sec:AMRFLDSplit_dt_selection} for further details);
+\item {\tt RadHydroMaxSubcycles} \{$\ge 1.0$\; [1.0]\} -- maximum
+  desired ratio between \enzo time step and radiation time step
+  ($\dt / \dt_E$);
+\item {\tt RadHydroDtNorm} \{$\ge 0.0$\; [2.0]\} -- choice of norm in
+  estimating temporal error (see section \ref{sec:AMRFLDSplit_dt_selection});
+\item {\tt RadHydroDtRadFac} \{$>0.0$\; [$\infty$]\} -- desired relative
+  accuracy of radiation field (see section \ref{sec:AMRFLDSplit_dt_selection});
+\item {\tt RadiationScaling} \{$>0.0$\; [1.0]\} -- unit scaling factor
+  to convert between \enzo radiation units and {\tt AMRFLDSplit}
+  radiation units (unnecessary if \enzo normalization sufficient, see
+  section \ref{sec:AMRFLDSplit_variable_rescaling});
+\item {\tt RadHydroTheta} \{$0.0 \le \theta \le 1.0$\; [1.0]\} --
+  implicitness parameter within time-stepping method (0 is explicit
+  Euler, 0.5 is trapezoidal, 1.0 is implicit Euler);
+\item {\tt RadiationBoundaryX0Faces, RadiationBoundaryX1Faces,
+  RadiationBoundaryX2Faces} \{0, 1, 2\; [0 0]\} -- integer pairs
+  specifying boundary condition type at each face (0 periodic, 1
+  Dirichlet, 2 Neumann), zero-valued fields are set by default but may
+  be overridden by {\tt ProblemType}-specific calls within {\tt
+    AMRFLDSplit\_Initialize.C};
+\item {\tt RadHydroSolType} \{0, 1, 2, 3, 4\; [1]\} -- choice of
+  \hypre algorithm for the main FLD linear system (0 FAC, 1 BiCGStab,
+  2 BiCGStab with BoomerAMG preconditioner, 3 GMRES, 4 PFMG),
+  currently only 1 and 3 are known to work for AMR simulations, while
+  4 is recommended for unigrid simulations;
+\item {\tt RadHydroSolTolerance} \{1e-15 $\le$ tol $\le$ 1.0\;
+  [1e-8]\} -- relative tolerance for FLD linear system residual;
+\item {\tt RadHydroMaxMGIters} \{$>0$\; [200]\} -- number of allowed
+  iterations in the main \hypre linear solver;
+\item {\tt RadHydroMGRelaxType} \{0, 1, 2, 3\; [1]\} -- choice of
+  relaxation method if using {\tt RadHydroSolType} of 4 (Jacobi 0,
+  weighted Jacobi 1, symmetric red/black Gauss-Seidel 2, nonsymmetric
+  red/black Gauss-Seidel 3);
+\item {\tt RadHydroMGPreRelax} \{$>0$\; [1]\} -- number of pre-relaxation
+  sweeps when using {\tt RadHydroSolType} of 4;
+\item {\tt RadHydroMGPostRelax} \{$>0$\; [1]\} --number of
+  post-relaxation sweeps when using {\tt RadHydroSolType} of 4;
+\item {\tt RadHydroSolPrec} \{0, 1\; [1]\} -- flag to enable the {\tt
+  AMRsolve\_HG\_Prec} class to precondition the \hypre solver (only
+  available for {\tt RadHydroSolType} 1 and 3);
+\item {\tt RadHydroSol\_precmaxit} \{$>0$\; [1]\} -- maximum number of
+  preconditioner sweeps per outer solver iteration;
+\item {\tt RadHydroSol\_precnpre} \{$>0$\; [1]\} -- number of
+  pre-relaxation sweeps per preconditioner iteration;
+\item {\tt RadHydroSol\_precnpost} \{$>0$\; [1]\} -- number of
+  post-relaxation sweeps per preconditioner iteration;
+\item {\tt RadHydroSol\_precJacit} \{$>0$\; [2]\} -- number of Jacobi
+  iterations on the full AMR hierarchy per preconditioner iteration;
+\item {\tt RadHydroSol\_precrelax} \{0, 1, 2, 3\; [1]\} -- relaxation
+  type for root-grid PFMG solve within the preconditioner (same values
+  as listed for {\tt RadHydroMGRelaxType} above;
+\item {\tt RadHydroSol\_precrestol} \{$\ge 0.0$\; [0.0]\} -- relative
+  linear residual tolerance for preconditioner system (0.0 disables
+  the residual check, forcing a fixed number of iterations).
+\end{itemize}
+
+
+
+
+
+\subsection{Flux-limited diffusion radiation model}
+\label{sec:rad_model}
+
+We begin with the equation for flux-limited diffusive radiative
+transfer in a cosmological medium \cite{ReynoldsHayesPaschosNorman2009},
+\begin{equation}
+\label{eq:radiation_PDE}
+  \partial_{t} E + \frac1a \nabla\cdot\(E\vb\) =
+    \nabla\cdot\(D\,\nabla E\) - \frac{\dot{a}}{a} E - c\kappa E + \eta,
+\end{equation}
+where here the comoving radiation energy density $E$, emissivity
+$\eta$ and opacity $\kappa$ are functions of space and time.  In this
+equation, the frequency-dependence of the radiation energy has been
+integrated out, under the premise of an assumed radiation energy
+spectrum (see section \ref{sec:AMRFLDSplit_spectrum}).
+
+The function $D$ in the above equation \eqref{eq:radiation_PDE} is
+the {\em flux-limiter} that depends on $E$, $\nabla E$ and the 
+opacity $\kappa$,  
+\[
+   D = \left[\begin{array}{ccc} D^{1} & & \\ & D^{2} & \\ & & D^{3} \end{array}\right],
+\]
+where the directional limiters $D^i$ are given by \cite{Morel2000}
+\begin{align}
+  \label{eq:Larsen_limiter}
+   D^{i}\left(E,\tfrac{\partial E}{\partial x_i},\kappa\right) = 
+     c \left[ 9\kappa^2 + 
+     \left(R\left(E,\tfrac{\partial E}{\partial x_i}\right)\right)^2\right]^{-1/2}, \qquad
+   R^i\left(E,\tfrac{\partial E}{\partial x_i}\right) = 
+     \max\left\{\frac{\left|\tfrac{\partial E}{\partial x_i} \right|}{E}, 10^{-20} \right\}. 
+\end{align}
+Within each uniform grid patch, the Laplace operator in
+\eqref{eq:radiation_PDE} is discretized using second-order centered
+differences on a standard cell-centered finite-volume mesh, with the
+flux limiters computed at cell faces, i.e.~in the $x_1$ direction we
+use 
+\begin{align*}
+  &\left[\frac{\partial}{\partial x_1}\left(D_1
+    \frac{\partial E}{\partial x_1}\right)\right]_{i,j,k} \ \approx \ 
+  \frac{1}{\dx_1} \left[
+    D^1_{i+1/2,j,k}\frac{E_{i+1,j,k}-E_{i,j,k}}{\dx_1} -
+    D^1_{i-1/2,j,k}\frac{E_{i,j,k}-E_{i-1,j,k}}{\dx_1} \right],\\
+  \text{where, e.g.} & \\
+  & D^1_{i+1/2,j,k} = D^{i}\left(
+     \tfrac{E_{i+1,j,k}+E_{i,j,k}}{2},
+     \tfrac{E_{i+1,j,k}-E_{i,j,k}}{\dx_1},
+     \tfrac{\kappa_{i+1,j,k}+\kappa_{i,j,k}}{2}\right).
+\end{align*}
+At coarse/fine grid boundaries, we use piecewise constant
+interpolation to shift dependence from non-existent same-grid
+neighbors to the coarser/finer neighbor across the level boundary,
+and adjust the relevant differencing parameters $\dx_i$
+appropriately. 
+
+
+
+\subsection{Radiation Spectrum}
+\label{sec:AMRFLDSplit_spectrum}
+
+As mentioned in section \ref{sec:rad_model}, the frequency-dependence
+of the radiation field has been integrated out, under the premise of
+an assumed radiation energy spectrum.  Assuming the frequency, space
+and time-dependent radiation field is denoted $E_{\nu}(\nu,\xvec,t)$,
+we first assume the radiation field exhibits the same frequency
+spectrum throughout the spatial domain and time evolution of the
+simulation, denoted $\chi(\nu)$, i.e.
+\begin{align}
+  \label{eq:spectrum}
+  E_{\nu}(\nu,\xvec,t) = \tilde{E}(\xvec,t) \chi(\nu),
+\end{align}
+where $\tilde{E}$ is an intermediate quantity (for analysis) that is
+never computed.  We then form a so-called ``grey'' model through
+integration over frequency space, i.e.
+\begin{align}
+  \label{eq:greyFLD}
+  E(\xvec,t) = \int_{\nu_{HI}}^{\infty} E_{\nu}(\nu,\xvec,t)\,\mathrm{d}\nu 
+    = \tilde{E}(\xvec,t) \int_{\nu_{HI}}^{\infty} \chi(\nu)\,\mathrm{d}\nu,
+\end{align}
+We note that if the assumed spectrum is the Dirac delta function,
+$\chi(\nu) = \delta_{\nu_{HI}}(\nu)$, $E$ is a monochromatic radiation
+energy density at the ionization threshold of HI, and the
+$\left(-\frac{\dot{a}}{a}E\right)$ term (obtained through integration
+by parts of the redshift term
+$\left(\frac{\dot{a}}{a}\partial_{\nu}E_{\nu}\right)$ present in the
+corresponding frequency-dependent equation) is omitted from
+\eqref{eq:radiation_PDE}.
+
+The {\tt AMRFLDSplit} solver allows for user control over this assumed
+spectrum, $\chi(\nu)$.  We currently have three pre-defined options in
+the code, although more can easily be added within the function \\
+{\tt AMRFLDSplit\_RadiationSpectrum.C}.  The three current options may
+be selected through the input parameter {\tt RadHydroESpectrum}
+discussed above, and consist of:
+\begin{itemize}
+\item[(-1)] monochromatic spectrum at frequency $h\nu_{HI} = 13.6$ eV, i.e.
+  $\chi(\nu) = \delta_{\nu_{HI}}(\nu)$.  
+\item[(0)] power law spectrum,
+  \[
+  \chi(\nu) = \left(\frac{\nu}{\nu_{HI}}\right)^{-1.5}
+  \]
+\item[(1)] $T=10^5$ K blackbody spectrum, 
+  \[
+  \chi(\nu) = \frac{8 \pi h
+    \left(\frac{\nu}{c}\right)^3}{\exp\left(\frac{h\nu}{k_b 10^5}\right)-1}.
+  \]
+\end{itemize}
+Additional spectra may be easily added by modifying the file 
+{\tt AMRFLDSplit\_RadiationSpectrum.C} to implement a new 
+{\tt RadHydroESpectrum}-dependent function $\chi(\nu)$, along with use
+of the new value for {\tt RadHydroESpectrum} in a user's FLD parameter
+file.  The units of this function do not matter, since we assume
+$\chi(\nu)$ to be dimensionless.  At the beginning of a simulation,
+the specified spectrum in {\tt AMRFLDSplit\_RadiationSpectrum.C} is
+integrated numerically in the routine 
+{\tt AMRFLDSplit\_ComputeRadiationIntegrals.C} to form high-accuracy
+approximations of
+\begin{align*}
+  \int_{\nu_{HI}}^{\infty} \chi(\nu)\, \mathrm{d}\nu, \qquad
+  \int_{\nu_i}^{\infty} \sigma_i(\nu)\, \chi(\nu)\, \mathrm{d}\nu,\qquad
+  \int_{\nu_{i}}^{\infty} \frac{\sigma_{i}(\nu)\,\chi(\nu)}{\nu}\, \mathrm{d}\nu,
+  \qquad i = \{\text{HI}, \text{HeI}, \text{HeII}\},
+\end{align*}
+where we denote $\nu_{i}$ as the ionization threshold of the species
+$\mn_i$.  These integrals are then combined at each time step of the
+simulation to form all of the spectrum-related integrals discussed in
+the remainder of this section.
+
+We do note that if a user wishes to modify the {\tt AMRFLDSplit}
+solver to account for other types of radiation with lower frequencies
+than $\nu_{HI}$ (e.g.~Ly-$\alpha$), then in addition to modifying how
+the spectra are defined in {\tt AMRFLDSplit\_RadiationSpectrum.C},
+they will also need to modify the limits of integration used within
+the routine {\tt AMRFLDSplit\_ComputeRadiationIntegrals.C}.
+
+The choice of spectrum affects the interactions between the radiation
+field and the chemistry.  Specifically, since gas photo-heating
+rate $G$ for a Hydrogen+Helium simulation depends on radiation through
+the equation 
+\[
+  G = \sum_{i} \frac{c\,\mn_{i}}{\rhob}
+    \int_{\nu_{i}}^{\infty} \sigma_{i}(\nu)\, E_{\nu}(\nu)
+    \left(1-\frac{\nu_{i}}{\nu}\right)\, \mathrm{d}\nu, 
+    \qquad i = \{\text{HI}, \text{HeI}, \text{HeII}\},
+\]
+then under assumption \eqref{eq:spectrum} this becomes
+\begin{equation}
+  \label{eq:G_nLTE}
+  G = \sum_{i} \frac{c\,\mn_{i}\,E}{\rhob} 
+    \left[\int_{\nu_i}^{\infty} \sigma_i(\nu)\, \chi(\nu)
+    \left(1-\frac{\nu_i}{\nu}\right)\, \mathrm{d}\nu\right] \bigg/
+    \left[\int_{\nu_{HI}}^{\infty} \chi(\nu)\, \mathrm{d}\nu\right],
+    \qquad i = \{\text{HI}, \text{HeI}, \text{HeII}\}.
+\end{equation}
+
+Similarly, the photo-ionization rates resulting from a
+frequency-dependent radiation field may be written
+\[
+  \Gamma_i^{ph} = \int_{\nu_{i}}^{\infty} \frac{c\, \sigma_{i}(\nu)\,
+    E_{\nu}}{h\nu}\, \mathrm{d}\nu,
+    \qquad i = \{\text{HI}, \text{HeI}, \text{HeII}\}.
+\]
+Again, under the assumption of a fixed frequency spectrum
+\eqref{eq:spectrum} this simplifies to
+\begin{equation}
+\label{eq:Gamma}
+  \Gamma_i^{ph} = \frac{c\,E}{h}
+  \left[\int_{\nu_{i}}^{\infty} \frac{\sigma_{i}(\nu)\,\chi(\nu)}{\nu}\,
+    \mathrm{d}\nu\right] \bigg/
+    \left[\int_{\nu_{HI}}^{\infty} \chi(\nu)\, \mathrm{d}\nu\right],
+    \qquad i = \{\text{HI}, \text{HeI}, \text{HeII}\}.
+\end{equation}
+The photo-heating and photo-ionization rates are set within the file
+{\tt AMRFLDSplit\_FillRates.C}, to eventually be passed on to 
+{\tt Enzo}'s routines for chemistry and cooling.  We note that if a
+user wishes to modify {\tt AMRFLDSplit} to perform alternate types of
+radiation transport, and if their new model interacts with the
+chemistry and cooling differently than the model described here, these
+modeling modifications should be incorporated into the {\tt
+  AMRFLDSplit\_FillRates.C} routine.
+
+Moreover, a frequency-dependent opacity $\kappa_{\nu}$ of a
+Hydrogen+Helium medium to radiation transport may be given by the
+formula
+\[
+  \kappa_{\nu} = \sum_i \sigma_i(\nu)\, \mn_i, 
+  \qquad i = \{\text{HI}, \text{HeI}, \text{HeII}\}.
+\]
+However, for simulation of our integrated radiation equation
+\eqref{eq:radiation_PDE}, we need the term
+\[
+   c\,\kappa\,E = c\int_{\nu_{HI}}^{\infty} \kappa_{\nu}
+   E_{\nu}\,\mathrm{d}\nu.
+\]
+Relating these formulas to the assumption \eqref{eq:spectrum}, we
+may compute the integrated opacity due to Hydrogen+Helium as
+\begin{equation}
+\label{eq:opacity}
+  \kappa \ = \ \sum_i
+  \left[\mn_{i} \int_{\nu_{i}}^{\infty}
+    \sigma_{i}(\nu)\,\chi(\nu)\,\mathrm{d}\nu\right] \bigg/
+  \left[\int_{\nu_{HI}}^{\infty} \chi(\nu)\,\mathrm{d}\nu\right].
+\end{equation}
+
+The final component that must be accounted for in using a
+frequency-integrated radiation field is the emissivity.  Given a
+frequency-, space- and time-dependent emissivity function of the form
+$\eta_{\nu}(\nu,\xvec,t)$, we must source the FLD radiation equation
+\eqref{eq:radiation_PDE} using a space- and time-dependent emissivity
+field 
+\begin{equation}
+\label{eq:emissivity}
+  \eta(\xvec,t) =
+  \int_{\nu_{HI}}^{\infty}\eta_{\nu}(\nu,\xvec,t)\,\mathrm{d}\nu. 
+\end{equation}
+The {\tt AMRFLDSplit} solver currently implements a wide variety of
+{\tt ProblemType}-dependent emissivity fields in the function 
+{\tt AMRFLDSplit\_RadiationSource.C}.  Additional user-specified 
+{\tt ProblemType}-dependent emissivity functions may be easily 
+inserted into this file.  We assume that this integrated emissivity is
+specified in CGS units of erg cm$^{-3}$ s$^{-1}$, and perform internal
+rescaling to convert this to code units within the solver.
+
+
+
+
+\subsection{Implicit Solution Approach}
+\label{sec:AMRFLDSplit_rad_solve}
+
+Since we treat the radiation as a density field the advective portion
+of \eqref{eq:radiation_PDE}, i.e. 
+\[
+  \partial_{t} E = -\frac1a \nabla\cdot\(E\vb\),
+\]
+is evolved using {\tt Enzo}'s hydrodynamics routines.  The 
+{\tt AMRFLDSplit} solver therefore focuses on evolution of the
+remainder of \eqref{eq:radiation_PDE}, i.e.
+\[
+  \partial_{t} E = \nabla\cdot\(D\,\nabla E\) - \frac{\dot{a}}{a} E - c\kappa E + \eta.
+\]
+We lag the nonlinearity in the limiter to the previous time step, and
+then discretize the remainder of the equation in time using a standard
+two-level $\theta$-method,
+\begin{align}
+  \label{eq:radiation_PDE_theta}
+  E^n - E^{n-1} &- \theta\dt\left(\nabla\cdot\(D^{n-1}\,\nabla E^n\) - \frac{\dot{a}}{a} E^n -
+    c\kappa^n E^n + \eta^n\right) \\ 
+  \notag
+  & - (1-\theta)\dt\left(\nabla\cdot\(D^{n-1}\,\nabla E^{n-1}\) - \frac{\dot{a}}{a} E^{n-1} -
+    c\kappa^{n-1} E^{n-1} + \eta^{n-1}\right) = 0,
+\end{align}
+where $0\le\theta\le 1$ defines the time-discretization.  As discussed
+in section \ref{sec:AMRFLDSplit_parameters}, the value of $\theta$ may
+be specified by the user in the FLD parameter input file. Recommended
+values of $\theta$ are 1.0 (implicit Euler -- $O(\dt)$ accurate,
+$A$ and $L$ stable) and $0.5$ (trapezoidal -- $O(\dt^2)$
+accurate, $A$ stable).  However, any nonzero value of $\theta$ will
+result in a linearly-implicit system of equations for the
+time-evolved radiation energy density $E^n$.  We write this in
+predictor-corrector form as
+\begin{align}
+\label{eq:linear_system}
+  J s = b, \quad\text{where}\quad s = E^n - E^{n-1}.
+\end{align}
+We then approximately solve this linear equation for the update $s$,
+to a relative residual tolerance $\delta$,
+\begin{align}
+\label{eq:linear_system_approx}
+  \| J s - b \|_2 \le \delta \|b\|_2.
+\end{align}
+As discussed in section \ref{sec:AMRFLDSplit_parameters}, the
+tolerance $\delta$ may be specified through the input parameter \\
+{\tt RadHydroSolTolerance}, and control over the solver algorithm and
+its parameters may be controlled through a myriad of input parameters.
+
+
+
+
+\subsection{Time-step selection}
+\label{sec:AMRFLDSplit_dt_selection}
+
+Time steps are chosen adaptively in an attempt to control error in the
+calculated solution.  To this end, we first define an heuristic
+measure of the time accuracy error in the radiation field $E(t^n)$ as
+either
+\begin{align}
+\label{eq:time_error}
+  \epsilon^{(n)} = \left(\frac{1}{V} \sum_{i} \Delta V_i 
+    \left(\frac{E_i^{n}-E_i^{n-1}}{\omega_i}\right)^p\right)^{1/p}, 
+\end{align}
+or
+\begin{align}
+\label{eq:time_error_inf}
+  \epsilon^{(n)} = \max_i\left|\frac{E_i^{n}-E_i^{n-1}}{\omega_i}\right|,
+  \quad\text{if}\; p=0.0,
+\end{align}
+where the weights $\omega_i$ are given by
+\begin{align}
+\label{eq:time_weighting}
+  \omega_i &= \sqrt{\left|E_i^n E_i^{n-1}\right|} + 10^{-1},
+\end{align}
+i.e.~we scale the radiation by the geometric mean of the old and new
+states, adding on a floor value of $10^{-1}$ in case any of the states
+are too close to zero.  Moreover, we omit from this sum or max all
+coarse-grid cells that are covered by a finer grid patch.  In the
+$p$-norm estimate, $\Delta V_i$ corresponds to the normalized volume
+of the grid cell containing $E_i$. This approach works well when the
+internal solution variables are unit-normalized, or at least close to
+unit-normalized, since the difference between the old and new
+solutions, divided by this weighting factor $\omega_i$, should give a
+reasonable estimate of the number of significant digits that have
+changed between time steps. 
+
+With these error estimates
+\eqref{eq:time_error}-\eqref{eq:time_weighting}, we set the new
+radiation time step size based on a user-input relative tolerance
+$\tau_{\text{tol}}$ in an attempt to minimize the requisite number of
+time steps to achieve the desired temporal accuracy.  Since $err$ is
+an estimate of the relative error, and $\tau_{\text{tol}}$ is the
+target relative error, we compute the ratio of these at each time
+step,
+\begin{align}
+  \label{eq:time_accuracy}
+  \zeta^{(n)} &= \max\left\{\frac{\epsilon^{(n)}}{\tau_{\text{tol}}},\; 10^{-8} \right\}.
+\end{align}
+With this estimate of our achieved accuracy in each time step, we
+allow the user to choose between three time adaptivity control
+algorithms \cite{KennedyCarpenter2003}:
+\begin{itemize}
+\item[(0)] I controller: 
+  \begin{align}
+    \label{eq:time_estimateI}
+    \dt_E^{(n+1)} = \dt_E^{(n)}\, \(\zeta^{(n)}\)^{-1/q}
+  \end{align}
+\item[(1)] PI controller:
+  \begin{align}
+    \label{eq:time_estimatePI}
+    \dt_E^{(n+1)} = \dt_E^{(n)}\, \(\zeta^{(n)}\)^{-0.7/q}\, \(\zeta^{(n-1)}\)^{0.4/q}
+  \end{align}
+\item[(2)] PID controller:
+  \begin{align}
+    \label{eq:time_estimatePID}
+    \dt_E^{(n+1)} = \dt_E^{(n)}\, \(\zeta^{(n)}\)^{-0.49/q}\, \(\zeta^{(n-1)}\)^{0.34/q}\, \(\zeta^{(n-2)}\)^{-0.1/q},
+  \end{align}
+\end{itemize}
+where in each of these $q$ equals 2 for $\theta=0.5$ and $q=1$
+otherwise, matching the order of accuracy of each method.  In the
+above formulas, $\dt_E$ represents the time step size used in evolving
+the radiation field via {\tt AMRFLDSplit}.  The values of $p$,
+$\tau_{\text{tol}}$ and the time adaptivity control algorithm may be
+specified using the FLD parameter file inputs {\tt RadHydroDtNorm} 
+{\tt RadHydroDtRadFac} and {\tt RadHydroDtControl}, respectively.
+
+Since $E$ may evolve at a faster time scale than the remaining
+components in \enzo, we allow time subcycling of the radiation field.
+Denoting the radiation time step as $\dt_{E}$ and the time step size
+for the remaining \enzo fields as $\dt$, then we use the input
+parameter {\tt RadHydroMaxSubcycles} to enforce the limit
+\[
+  \dt \ \le \ \text{\tt RadHydroMaxSubcycles} * \dt_E,
+\]
+where $\dt_E$ results from our time adaptivity algorithm.  
+
+Finally, a user may specify minimum and maximum values for $\dt_E$
+through the input parameters {\tt RadHydroMinDt} and 
+{\tt RadHydroMaxDt}.  These values should be supplied in {\tt Enzo}'s
+scaled time units.
+
+
+{\bf Notes/Warnings:}
+\begin{itemize}
+\item The radiation time adaptivity algorithm may be disabled by
+  leaving the input parameter {\tt RadHydroDtRadFac} unset (i.e.~set
+  to $\infty$).
+\item Since the FLD solve requires coupling throughout the entire
+  computational domain, the {\tt AMRFLDSplit} module may comprise a
+  large fraction of the total run time for a simulation, though this 
+  cost can be reduced by either setting a looser (larger) tolerance
+  {\tt RadHydroDtRadFac} or a larger subcycling factor {\tt
+    RadHydroMaxSubcycles}. 
+\item For problems with significant interaction between radiation and
+  chemistry or cooling, it is {\em strongly} recommended that the
+  tolerance be set to a maximum of $10^{-2}$ and that subcycling be
+  disabled (by leaving {\tt RadHydroMaxSubcycles} at 1.0).  This is
+  because the chemistry and cooling routines are handled by separate
+  \enzo modules, but these physical processes are tightly coupled.
+  Hence, by loosening the coupling in the solvers the physics will not
+  be properly modeled.
+\end{itemize}
+
+
+We further note that when run in combination with Enzo's hydrodynamics
+routines, both modules will limit their maximum time step sizes to the
+minimum of $\dt_{\text{E}}$ and $\dt_{\text{CFL}}$.  As a result, in
+some physical regimes, the global time step size will be limited based
+on the radiation time scale, and in other regimes it will be limited
+by the hydrodynamic time scale. 
+
+
+
+
+\subsection{Variable rescaling}
+\label{sec:AMRFLDSplit_variable_rescaling}
+
+In the case that {\tt Enzo}'s standard unit non-dimensionalization
+using {\tt DensityUnits}, {\tt LengthUnits} and {\tt TimeUnits} is
+insufficient to rescale the resulting internal values for $E$ to have
+nearly unit magnitude, the user may input an additional variable
+scaling factor to be used inside the {\tt AMRFLDSplit} module, through
+the FLD input parameter {\tt RadiationScaling}.  Denoting this
+user-input value as $s_E$, we define the rescaled variable $\tilde{E}
+= E / s_E$, which {\tt AMRFLDSplit} in its internal routines instead
+of Enzo's internal variable $E$.  If the user does not know an
+appropriate value for this scaling factor {\em a-priori}, a
+generally-applicable rule of thumb is to first run the simulation for
+a small number of time steps and investigate {\tt Enzo}'s HDF5 output
+files to see the magnitude of the values stored internally by \enzo;
+if these are far from unit-magnitude, a scaling factor should be used. 
+
+
+
+
+\subsection{Boundary conditions}
+\label{sec:AMRFLDSplit_boundary_conditions}
+
+As the radiation equation \eqref{eq:radiation_PDE} is parabolic,
+boundary conditions must be supplied on the radiation field $E$.  The
+{\tt AMRFLDSplit} module allows three types of boundary conditions to
+be placed on the radiation field:
+\begin{itemize}
+\item[(0)] Periodic,
+\item[(1)] Dirichlet, i.e.~$E(x,t) = g(x), \; x\in\partial\Omega$, and
+\item[(2)] Neumann, i.e.~$\nabla E(x,t)\cdot n = g(x), \; x\in\partial\Omega$.
+\end{itemize}
+In most cases, the boundary condition types (and values of $g$) are
+problem-dependent.  When adding new problem types, these 
+{\tt ProblemType}-dependent conditions should be set near the bottom
+of the file {\tt AMRFLDSplit\_Initialize.C}, otherwise these will
+default to either (a) periodic, or (b) will use $g=0$, depending on
+the user input boundary condition type (specified through the FLD
+input parameters \\
+{\tt RadiationBoundaryX0Faces}, {\tt RadiationBoundaryX1Faces}, and
+{\tt RadiationBoundaryX2Faces}. 
+
+
+
+
+\subsection{Refinement Strategies}
+\label{sec:AMRFLDSplit_refinement}
+
+For testing purposes, we have implemented four mesh adaptivity
+refinement criteria for use with the {\tt AMRFLDSplit} solver, all of
+which require the \enzo configuration option {\tt TRANSFER} enabled
+for compilation.  The first three of these may be physically relevant
+within astrophysical simulations, while the fourth exists purely for
+verification and scaling tests.  
+\begin{itemize}
+\item {\tt Grid\_FlagCellsToBeRefinedByRadiationGradient.C} -- this
+  adaptivity strategy is enabed with the input parameter 
+  {\tt CellFlaggingMethod} set to 19.  This routine iterates over all
+  of the cells in each grid, and computes a normalized gradient of the
+  radiation field,
+  \begin{align*}
+     g_{0,i,j,k} &= \frac{E_{i+1,j,k}-E_{i-1,j,k}}{\max\{|E_{i,j,k}|, 0.1\}}\\
+     g_{1,i,j,k} &= \frac{E_{i,j+1,k}-E_{i,j-1,k}}{\max\{|E_{i,j,k}|, 0.1\}}\\
+     g_{2,i,j,k} &= \frac{E_{i,j,k+1}-E_{i,j,k-1}}{\max\{|E_{i,j,k}|, 0.1\}}\\
+     G_{i,j,k} &= \( g_{0,i,j,k}^2 + g_{1,i,j,k}^2 + g_{2,i,j,k}^2 \)^{1/2},
+  \end{align*}
+  and compares this against a user-specified minimum slope for
+  refinement, $r_{min}$, to determine whether the cell should be
+  refined, i.e.
+  \[
+     G_{i,j,k} > r_{min} \;\Rightarrow\;\text{refine}, \qquad
+     G_{i,j,k} \le r_{min} \;\Rightarrow\;\text{do not refine}.
+  \]
+  The value of $r_{min}$ is taken from the first entry in the 
+  {\tt MinimumSlopeForRefinement} input array.  From heuristic tests,
+  we find that a value of 1.3 for this parameter is typically
+  sufficient.
+\item {\tt Grid\_FlagCellsToBeRefinedByOpacity.C} -- this adaptivity
+  strategy is enabed with the input parameter {\tt CellFlaggingMethod}
+  set to 20.  This routine performs the same gradient-based comparisons as 
+  the above routine, except that it examines gradients in the opacity
+  field, $\kappa$, defined in \eqref{eq:opacity}.  The value of
+  $r_{min}$ for this test is taken from the second entry in the 
+  {\tt MinimumSlopeForRefinement} input array.  Heuristic tests have
+  demonstrated that a reliable value for this threshold is 1.0.
+\item {\tt Grid\_FlagCellsToBeRefinedByIonizedFraction.C} -- this
+  adaptivity strategy is enabled with the input parameter 
+  {\tt CellFlaggingMethod} set to 21.  This routine again performs the
+  same gradient-based comparisons as the above routines, except that
+  it examines the gradients of the ionized fraction
+  \[
+     \mathcal I = 1 - \frac{HI + HeI + \frac12 HeII}{\rho}.
+  \]
+  Here, the value of $r_{min}$ is taken from the third entry in the
+  {\tt MinimumSlopeForRefinement} input array, with heuristic tests
+  showing that a value of 1.25 is typically sufficient.
+\item {\tt Grid\_FlagCellsToBeRefinedForWeakScaling.C} -- this
+  adaptivity strategy is enabed with the input parameter 
+  {\tt CellFlaggingMethod} set to 22, and should only be used for
+  weak-scaling performance tests.  The routine flags cells based on
+  their location in relation to the root grid tile below each cell.
+  If the center of this root grid tile is located at $(c_0, c_1, c_2)$
+  and has size $L_0\times L_1\times L_2)$, we set a refinement region
+  on the level $l$ as 
+  \[
+     R_l =  \left[c_0-\frac{L_0}{2^{l+2}}, c_0+\frac{L_0}{2^{l+2}} \right] 
+     \times \left[c_1-\frac{L_1}{2^{l+2}}, c_1+\frac{L_1}{2^{l+2}} \right] 
+     \times \left[c_2-\frac{L_2}{2^{l+2}}, c_2+\frac{L_2}{2^{l+2}} \right].
+  \]
+  If the center of a given grid cell within level $l$ lies in the
+  region $R_l$, it is marked for refinement. 
+\end{itemize}
+
+
+\subsection{FLD Hierarchy}
+\label{sec:AMRFLDSplit_hierarchy}
+
+The {\tt AMRFLDSplit} solver is designed to be called on a given level
+of the hierarchy (typically the root grid level), as specified by the
+main \enzo input parameter {\tt RadiativeTransferFLDCallOnLevel}.
+When {\tt AMRFLDSplit} is called on a specified level, it constructs
+and solves the equation \eqref{eq:radiation_PDE} on a hierarchy
+spanning from the calling level to the highest level in the AMR
+hierarchy.  For example, in an AMR run with 7 levels, if 
+{\tt AMRFLDSplit} is called on level 2, it will form the radiation
+equations on a hierarchical grid comprised of levels 2 through 7.
+
+Since equation \eqref{eq:radiation_PDE} is parabolic, the full
+implicit system is solved simultaneously, using a fixed time step in
+the hierarchical solve, where the time step size is limited only by
+the main \enzo time step size on the call level.  As a result, within
+subcycled time steps of the {\tt EvolveLevel} routine on finer levels
+of the hierarchy, the radiation field will have already been evolved
+further in time, and is therefore held fixed until all of the levels
+have caught back up with the current radiation field.
+
+Furthermore, since all of the levels between the calling level and the
+finest AMR level are solved simultaneously, the solution on all coarse
+grid cells that are covered by a fine grid patch is over-written by
+the average value of the covering cells.  A direct consequence of this
+is that it is only necessary to specify the emissivity $\eta$ in cells
+on the finest grid level in a given location, since coarser cells will
+not contribute to the final solution.
+
+
+
+
+\subsection{{\tt AMRFLDSplit} Test Problems}
+\label{sec:AMRFLDSplit_test_problems}
+
+We have set up a number of test problems that utilize the 
+{\tt AMRFLDSplit} solver.  These generally mirror the existing test
+problems used in the {\tt gFLDProblem} and {\tt gFLDSplit} solver
+modules, though here are set to use either statically-nested or
+adaptive mesh refinement.  All of these test problems are included in
+the \enzo distribution, in the source directory 
+{\tt run/RadiationTransportFLD/}. 
+\begin{itemize}
+\item {\tt RHIonization1\_AMRstatic} -- This implements ``test 1''
+  from \cite{IlievEtAl2006}; a uniform density, isothermal, Hydrogen
+  I-front propagation test, using a monochromatic radiation energy
+  density at $h\nu$ = 13.6 eV.  This test runs the problem using a
+  coarse $16^3$ root grid with 2 levels of geometric mesh
+  refinement ({\tt CellFlaggingMethod} 22).
+\item {\tt RHIonization1\_AMRdynamic} -- This mimics the previous
+  test, but uses an adaptive mesh based the opacity gradient
+  (i.e.~{\tt CellFlaggingMethod} 20).
+\item {\tt RHIonization2\_AMRstatic} -- This implements ``test 2''
+  from \cite{IlievEtAl2006}; a uniform density, temperature-dependent,
+  Hydrogen I-front propagation test, using $T=10^5$ K blackbody
+  radiation energy spectrum.  This test runs the problem using a 
+  coarse $16^3$ root grid with 2 levels of geometric mesh
+  refinement.
+\item {\tt RHIonization2\_AMRdynamic} -- This mimics the previous
+  test, but uses an adaptive mesh based on the gradient of the ionized
+  fraction ({\tt CellFlaggingMethod} 21).
+\item {\tt CosmoIonization\_qXzY\_AMRstatic} -- These implement ``test 
+  4.6'' from \cite{ReynoldsHayesPaschosNorman2009}; cosmological
+  uniform density, isothermal, Hydrogen I-front propagation tests,
+  using a monochromatic radiation energy density at $h\nu$ = 13.6 eV.
+  Here, the ``X'' in the test name is one of 0.5 or 0.05,
+  corresponding to the cosmological deceleration parameter used in the
+  test.  Similarly, ``Y'' is one of 4 or 10, corresponding to the
+  initial redshift used in the run.  These tests run using a coarse
+  $16^3$ root grid with 2 levels of geometric mesh refinement.
+\item {\tt CosmoIonization\_qXzY\_AMRdynamic} -- These mimic the
+  previous set of tests, but use an adaptive mesh based on the opacity
+  gradient.
+\item {\tt AMRFLDSplit\_weak\_scaling} -- This implement the 
+  {\tt RHIonization2\_AMRdynamic} test, but now mirrored within each
+  root-grid tile.  It is designed to perform timing tests of 
+  {\tt AMRFLDSplit} as the number of MPI tasks and the number of AMR
+  levels are increased.
+\end{itemize}
+
+
+
+
+
+\section{Concluding remarks}
+\label{sec:conclusions}
+
+We wish to remark that \amrsolve is designed for flexibility, to be
+easily adapted to new physical models and problems.  While we have
+strived to ensure that \amrsolve, {\tt AMRGravitySolve} and 
+{\tt AMRFLDSplit} are bug-free, we welcome any feedback and/or
+collaboration from the \enzo community, including bugfixes, usability
+suggestions, requests for new physical functionality.
+
+
+\bibliography{sources}
+\bibliographystyle{siam}
+\end{document}

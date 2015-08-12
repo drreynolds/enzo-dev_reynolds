@@ -148,7 +148,10 @@ EXTERN int FastSiblingLocatorEntireDomain;
 			 11 = FlagCellsToBeRefinedByResistiveLength
                          12 = FlagCellsToBeRefinedByMustRefineRegion
 			 13 = FlagCellsToBeRefinedByMetallicity
-       15 = FlagCellsToBeRefinedBySecondDerivative
+			 15 = FlagCellsToBeRefinedBySecondDerivative
+			 19 = FlagCellsToBeRefinedByRadiationGradient
+			 20 = FlagCellsToBeRefinedByOpacity
+			 21 = FlagCellsToBeRefinedByIonizedFraction
  */
 
 EXTERN int CellFlaggingMethod[MAX_FLAGGING_METHODS];
@@ -267,6 +270,20 @@ EXTERN float PointSourceGravityCoreRadius;
 EXTERN int SelfGravity;
 EXTERN int SelfGravityGasOff;
 EXTERN int AccretionKernal;
+EXTERN int SelfGravityConsistent;
+
+/* AMRGravitySolve control parameters */
+
+EXTERN int   AMRGravitySolve_solver;     /*   0, 1 or 2   */
+EXTERN int   AMRGravitySolve_useprec;    /* TRUE or FALSE */
+EXTERN int   AMRGravitySolve_zeroguess;  /* TRUE or FALSE */
+EXTERN int   AMRGravitySolve_maxit;      /*      > 0      */
+EXTERN int   AMRGravitySolve_precmaxit;  /*      > 0      */
+EXTERN int   AMRGravitySolve_rlxtype;    /*  0, 1, 2 or 3 */
+EXTERN int   AMRGravitySolve_npre;       /*      > 0      */
+EXTERN int   AMRGravitySolve_Jaciters;   /*      > 0      */
+EXTERN float AMRGravitySolve_restol;     /*     >= 0.0    */
+EXTERN float AMRGravitySolve_precrestol; /*     >= 0.0    */
 
 /* CopyGravPotential (TRUE or FALSE) */
 
@@ -927,8 +944,7 @@ EXTERN int RadiativeTransferFLD;
       1 => use the gFLDProblem module for single-group coupled FLD
       2 => use the FSProb module for free-streaming FLD radiation 
       3 => use the gFLDSplit module for single-group split FLD
-      4 => use the MFProb, multi-frequency fully implicit module
-      5 => use the MFSplit, multi-frequency split implicit module
+      6 => use the AMRFLDSplit, grey AMR-FLD split implicit module
 */
 EXTERN int ImplicitProblem;
 

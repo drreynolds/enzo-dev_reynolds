@@ -21,6 +21,29 @@ OBJS_CONFIG_LIB = \
         AdiabaticExpansionInitialize.o \
         AdjustRefineRegion.o \
         AdjustMustRefineParticlesRefineToLevel.o \
+        AMRFLDSplit_AccessEmissivityField.o \
+        AMRFLDSplit_AccessRadiationField.o \
+        AMRFLDSplit_ComputeRadiationIntegrals.o \
+        AMRFLDSplit_ComputeTimeStep.o \
+        AMRFLDSplit_constructor.o \
+        AMRFLDSplit_destructor.o \
+        AMRFLDSplit_EnforceBoundary.o \
+        AMRFLDSplit_Evolve.o \
+        AMRFLDSplit_FillRates.o \
+        AMRFLDSplit_Initialize.o \
+        AMRFLDSplit_Limiter.o \
+        AMRFLDSplit_Opacity.o \
+        AMRFLDSplit_RadiationSource.o \
+        AMRFLDSplit_RadStep.o \
+        AMRFLDSplit_RadStepUnigrid.o \
+        AMRFLDSplit_ReadParameters.o \
+        AMRFLDSplit_Redshifting.o \
+        AMRFLDSplit_SetupBoundary.o \
+        AMRFLDSplit_SetupSources.o \
+        AMRFLDSplit_SetupSystem.o \
+        AMRFLDSplit_UpdateUnits.o \
+        AMRFLDSplit_WriteParameters.o \
+        AMRGravitySolve.o \
         AMRH5writer.o \
         AnalysisBaseClass.o \
         AnalysisBaseClass_HDF5Utils.o \
@@ -31,6 +54,7 @@ OBJS_CONFIG_LIB = \
         auto_show_config.o \
         auto_show_flags.o \
         auto_show_version.o \
+        BlackbodySED.o \
         BlockSolve.o \
         calcdiss.o \
         calc_dt.o \
@@ -84,6 +108,7 @@ OBJS_CONFIG_LIB = \
         CommunicationShareGrids.o \
         CommunicationShareParticles.o \
         CommunicationShareStars.o \
+        CommunicationSolvePotential.o \
         CommunicationSyncNumberOfParticles.o \
         CommunicationTransferParticlesOpt.o \
         CommunicationTransferStarsOpt.o \
@@ -126,6 +151,7 @@ OBJS_CONFIG_LIB = \
         CreateSmoothedDarkMatterFields.o \
         CreateSUBlingList.o \
         CreateFluxes.o \
+        CrossSectionSED.o \
         InitializeFluxes.o \
         DeleteFluxes.o \
         DeleteSUBlingList.o \
@@ -331,6 +357,7 @@ OBJS_CONFIG_LIB = \
 	Grid_ClearMassFlaggingField.o \
 	Grid_ClearParticleAccelerations.o \
 	Grid_ClearParticleMassFlaggingField.o \
+	Grid_ClearPotentialField.o \
 	Grid_ClusterInitializeGrid.o \
 	Grid_ClusterSMBHFeedback.o \
         Grid_ClusterSMBHEachGridGasMass.o \
@@ -383,6 +410,7 @@ OBJS_CONFIG_LIB = \
 	Grid_CopyBaryonFieldToOldBaryonField.o \
 	Grid_CopyOverlappingMassField.o \
 	Grid_CopyParentToGravitatingFieldBoundary.o \
+	Grid_CopyParentToPotentialFieldBoundary.o \
 	Grid_CopyPotentialField.o \
 	Grid_CopyPotentialToBaryonField.o \
 	Grid_CopyZonesFromGridCountOnly.o \
@@ -420,18 +448,22 @@ OBJS_CONFIG_LIB = \
         Grid_FlagCellsToAvoidRefinement.o \
         Grid_FlagCellsToAvoidRefinementRegion.o \
 	Grid_FlagCellsToBeRefinedByCoolingTime.o \
+	Grid_FlagCellsToBeRefinedByIonizedFraction.o \
 	Grid_FlagCellsToBeRefinedByJeansLength.o \
 	Grid_FlagCellsToBeRefinedByTotalJeansLength.o \
 	Grid_FlagCellsToBeRefinedByMass.o \
 	Grid_FlagCellsToBeRefinedByMetallicity.o \
 	Grid_FlagCellsToBeRefinedByMustRefineParticles.o \
 	Grid_FlagCellsToBeRefinedByMustRefineRegion.o \
+	Grid_FlagCellsToBeRefinedByOpacity.o \
+	Grid_FlagCellsToBeRefinedByRadiationGradient.o \
 	Grid_FlagCellsToBeRefinedByResistiveLength.o \
 	Grid_FlagCellsToBeRefinedByShear.o \
 	Grid_FlagCellsToBeRefinedByShocks.o \
 	Grid_FlagCellsToBeRefinedByShockwaves.o \
 	Grid_FlagCellsToBeRefinedBySlope.o \
 	Grid_FlagCellsToBeRefinedBySecondDerivative.o \
+	Grid_FlagCellsToBeRefinedForWeakScaling.o \
 	Grid_FlagRefinedCells.o \
 	Grid_FlagGridArray.o \
 	Grid_FreeExpansionInitializeGrid.o \
@@ -480,6 +512,7 @@ OBJS_CONFIG_LIB = \
 	Grid_KHInitializeGrid.o \
 	Grid_KHInitializeGridRamp.o \
         Grid_MagneticFieldResetter.o \
+	Grid_MFIonizationTestInitializeGrid.o \
 	Grid_MirrorStarParticles.o \
 	Grid_MoveAllParticles.o \
 	Grid_MoveAllStars.o \
@@ -659,12 +692,14 @@ OBJS_CONFIG_LIB = \
         MemoryAllocationRoutines.o \
 	MemoryPoolRoutines.o \
 	MersenneTwister.o \
+	MFIonizationTestInitialize.o \
         mg_calc_defect.o \
         mg_prolong2.o \
         mg_prolong.o \
         mg_relax.o \
         mg_restrict.o \
         mkl_st1.o \
+	MonochromaticSED.o \
         Mpich_V1_Dims_create.o \
         multi_cool.o \
         MultigridSolver.o \
@@ -775,6 +810,7 @@ OBJS_CONFIG_LIB = \
         s90_st1.o \
 	SearchUtilities.o \
         SedovBlastInitialize.o \
+	SED_integral.o \
         select_fft.o \
 	SetBoundaryConditions.o \
         SetDefaultGlobalValues.o \
@@ -851,6 +887,7 @@ OBJS_CONFIG_LIB = \
         TestGravitySphereCheckResults.o \
         TestGravitySphereInitialize.o \
         TestOrbitInitialize.o \
+	TotalFieldValue.o \
         TracerParticleCreation.o \
 	TransposeRegionOverlap.o \
         tscint1d.o \
@@ -1121,6 +1158,20 @@ OBJS_HYDRO_RK = \
 	hydro_rk/Riemann_HLL_MHD.o \
 	hydro_rk/Riemann_HLLD_MHD.o \
 	hydro_rk/Riemann_LLF_MHD.o
+
+OBJS_AMR_SOLVE = \
+        AMRsolve_domain.o \
+        AMRsolve_faces.o \
+        AMRsolve_grid.o \
+        AMRsolve_hierarchy.o \
+        AMRsolve_hypre_fld.o \
+        AMRsolve_hypre_grav.o \
+        AMRsolve_HG_prec.o \
+        AMRsolve_level.o \
+        AMRsolve_mpi.o \
+        AMRsolve_parameters.o \
+        AMRsolve_point.o \
+        AMRsolve_problem.o
 
 # Objects for the CUDA GPU-computing support
 OBJS_ECUDA_ALL = \

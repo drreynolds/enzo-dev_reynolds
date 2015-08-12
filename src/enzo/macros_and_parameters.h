@@ -87,6 +87,8 @@
 
 #define VERSION                             2.4  /* current version number */
 
+#define MAX_FLD_FIELDS                     10
+
 /* Unmodifiable Parameters */
 
 #define MAX_DIMENSION                       3  /* must be 3! */

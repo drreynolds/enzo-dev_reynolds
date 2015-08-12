@@ -31,8 +31,7 @@
 #include "gFLDProblem.h"
 #include "gFLDSplit.h"
 #include "FSProb.h"
-// #include "MFProb.h"
-// #include "MFSplit.h"
+#include "AMRFLDSplit.h"
 #include "NullProblem.h"
 
 int RadiativeTransferReadParameters(FILE *fptr);
@@ -130,10 +129,8 @@ int RadiativeTransferInitialize(char *ParameterFile,
       ImplicitSolver = new FSProb; 
     else if (ImplicitProblem == 3)
       ImplicitSolver = new gFLDSplit; 
-    // else if (ImplicitProblem == 4)    // MFProb has been removed
-    //   ImplicitSolver = new MFProb; 
-    // else if (ImplicitProblem == 5)    // MFSplit has been disabled
-    //   ImplicitSolver = new MFSplit; 
+    else if (ImplicitProblem == 6)
+      ImplicitSolver = new AMRFLDSplit; 
     else
       ImplicitSolver = new NullProblem;
   }
@@ -234,6 +231,9 @@ int RadiativeTransferInitialize(char *ParameterFile,
       TypesToAdd[FieldsToAdd++] = kphHI;
       TypesToAdd[FieldsToAdd++] = PhotoGamma;
       if (RadiativeTransferHydrogenOnly == FALSE) {
+	TypesToAdd[FieldsToAdd++] = HeIDensity;
+	TypesToAdd[FieldsToAdd++] = HeIIDensity;
+	TypesToAdd[FieldsToAdd++] = HeIIIDensity;
 	TypesToAdd[FieldsToAdd++] = kphHeI;
 	TypesToAdd[FieldsToAdd++] = kphHeII;
       }

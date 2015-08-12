@@ -29,13 +29,16 @@
 
 
 /* default constants */
-#define DEFAULT_MU 0.6       // mean molecular mass
-#define MIN_TEMP 1.0         // minimum temperature [K]
+#define DEFAULT_MU 0.6           // mean molecular mass
+#define MIN_TEMP 1.0             // minimum temperature [K]
+#define MAX_INITIAL_PATCHES 100  // max number of parameter file defined subgrids
 
 
 // function prototypes
 int InitializeRateData(FLOAT Time);
-
+void AddLevel(LevelHierarchyEntry *Array[], HierarchyEntry *Grid, int level);
+int RebuildHierarchy(TopGridData *MetaData,
+		     LevelHierarchyEntry *LevelArray[], int level);
 
 
 
@@ -47,23 +50,49 @@ int RadHydroConstTestInitialize(FILE *fptr, FILE *Outfptr,
   if (MyProcessorNumber == ROOT_PROCESSOR)
     fprintf(stdout,"Entering RadHydroConstTestInitialize routine\n");
 
+  char *kphHIName    = "HI_kph";
+  char *kphHeIName   = "HeI_kph";
+  char *kphHeIIName  = "HeII_kph";
+  char *gammaName    = "PhotoGamma";
+  char *kdissH2IName = "H2I_kdiss";
   char *DensName  = "Density";
   char *TEName    = "TotalEnergy";
   char *IEName    = "Internal_Energy";
   char *Vel0Name  = "x-velocity";
   char *Vel1Name  = "y-velocity";
   char *Vel2Name  = "z-velocity";
-  char *RadName   = "Grey_Radiation_Energy";
   char *HIName    = "HI_Density";
   char *HIIName   = "HII_Density";
   char *HeIName   = "HeI_Density";
   char *HeIIName  = "HeII_Density";
   char *HeIIIName = "HeIII_Density";
   char *DeName    = "Electron_Density";
+  char *RadName   = "Grey_Radiation_Energy";
+  char *RadName0  = "Radiation0";
+  char *RadName1  = "Radiation1";
+  char *RadName2  = "Radiation2";
+  char *RadName3  = "Radiation3";
+  char *RadName4  = "Radiation4";
+  char *RadName5  = "Radiation5";
+  char *RadName6  = "Radiation6";
+  char *RadName7  = "Radiation7";
+  char *RadName8  = "Radiation8";
+  char *RadName9  = "Radiation9";
+  char *EtaName   = "Emissivity";
+  char *EtaName0  = "Emissivity0";
+  char *EtaName1  = "Emissivity1";
+  char *EtaName2  = "Emissivity2";
+  char *EtaName3  = "Emissivity3";
+  char *EtaName4  = "Emissivity4";
+  char *EtaName5  = "Emissivity5";
+  char *EtaName6  = "Emissivity6";
+  char *EtaName7  = "Emissivity7";
+  char *EtaName8  = "Emissivity8";
+  char *EtaName9  = "Emissivity9";
 
   // local declarations
   char line[MAX_LINE_LENGTH];
-  int  dim, ret;
+  int  i, j, dim, gridnum, ret, level, patch;
 
   // Setup and parameters:
   //  1. ambient density (should be very small) - free parameter
@@ -88,6 +117,7 @@ int RadHydroConstTestInitialize(FILE *fptr, FILE *Outfptr,
   float RadHydroInitialFractionHeII  = 0.0;
   float RadHydroInitialFractionHeIII = 0.0;
   int   RadHydroChemistry            = 1;
+  int   AMRFLDNumRadiationFields     = 0;    // grey solver
   int   RadHydroModel                = 1;
 
   // overwrite input from RadHydroParamFile file, if it exists
@@ -102,6 +132,8 @@ int RadHydroConstTestInitialize(FILE *fptr, FILE *Outfptr,
 		      &RadHydroX2Velocity);
 	ret += sscanf(line, "RadHydroChemistry = %"ISYM, 
 		      &RadHydroChemistry);
+	ret += sscanf(line, "AMRFLDNumRadiationFields = %"ISYM, 
+		      &AMRFLDNumRadiationFields);
 	ret += sscanf(line, "RadHydroModel = %"ISYM, 
 		      &RadHydroModel);
 	ret += sscanf(line, "RadHydroDensity = %"FSYM, 
@@ -112,17 +144,15 @@ int RadHydroConstTestInitialize(FILE *fptr, FILE *Outfptr,
 		      &RadHydroIEnergy);
 	ret += sscanf(line, "RadHydroRadiationEnergy = %"FSYM, 
 		      &RadHydroRadiationEnergy);
-	if (RadHydroChemistry > 0)
-	  ret += sscanf(line, "RadHydroInitialFractionHII = %"FSYM, 
-			&RadHydroInitialFractionHII);
-	if (RadHydroChemistry > 1) {
-	  ret += sscanf(line, "RadHydroHFraction = %"FSYM, 
-			&RadHydroHydrogenMassFraction);
-	  ret += sscanf(line, "RadHydroInitialFractionHeII = %"FSYM, 
-			&RadHydroInitialFractionHeII);
-	  ret += sscanf(line, "RadHydroInitialFractionHeIII = %"FSYM, 
-			&RadHydroInitialFractionHeIII);
-	}
+	ret += sscanf(line, "RadHydroInitialFractionHII = %"FSYM, 
+		      &RadHydroInitialFractionHII);
+	ret += sscanf(line, "RadHydroHFraction = %"FSYM, 
+		      &RadHydroHydrogenMassFraction);
+	ret += sscanf(line, "RadHydroInitialFractionHeII = %"FSYM, 
+		      &RadHydroInitialFractionHeII);
+	ret += sscanf(line, "RadHydroInitialFractionHeIII = %"FSYM, 
+		      &RadHydroInitialFractionHeIII);
+
       } // end input from parameter file
       fclose(RHfptr);
     }
@@ -141,6 +171,10 @@ int RadHydroConstTestInitialize(FILE *fptr, FILE *Outfptr,
       fprintf(stderr,"Error in InitializeRateData.\n");
       return FAIL;
     }
+
+  // since AMRFLD solver no longer relies on RadHydroChemistry input, deduce the value here
+  if (ImplicitProblem == 6) 
+    RadHydroChemistry = (RadiativeTransferHydrogenOnly) ? 1 : 3;
 
   // if temperature specified and not internal energy, perform conversion here
   if (RadHydroIEnergy == -1.0) {
@@ -187,20 +221,21 @@ int RadHydroConstTestInitialize(FILE *fptr, FILE *Outfptr,
     }
   }
 
-  // set up the grid(s) on this level
+  /////////////////
+  // Set up the TopGrid as usual
   printf("RadHydroConstTestInitialize: calling grid initializer\n");
-  HierarchyEntry *Temp = &TopGrid;
-  while (Temp != NULL) {
-    if (Temp->GridData->RadHydroConstTestInitializeGrid(RadHydroChemistry, 
-			RadHydroDensity, RadHydroX0Velocity, RadHydroX1Velocity, 
-			RadHydroX2Velocity, RadHydroIEnergy, 
+  HierarchyEntry *TempGrid = &TopGrid;
+  while (TempGrid != NULL) {
+    if (TempGrid->GridData->RadHydroConstTestInitializeGrid(RadHydroChemistry, 
+			AMRFLDNumRadiationFields, RadHydroDensity, RadHydroX0Velocity, 
+			RadHydroX1Velocity, RadHydroX2Velocity, RadHydroIEnergy, 
 			RadHydroRadiationEnergy, RadHydroHydrogenMassFraction, 
                         RadHydroInitialFractionHII, RadHydroInitialFractionHeII, 
                         RadHydroInitialFractionHeIII, local) == FAIL) {
       fprintf(stderr, "Error in RadHydroConstTestInitializeGrid.\n");
       return FAIL;
     }
-    Temp = Temp->NextGridThisLevel;
+    TempGrid = TempGrid->NextGridThisLevel;
   }
 
   // set up field names and units
@@ -212,17 +247,75 @@ int RadHydroConstTestInitialize(FILE *fptr, FILE *Outfptr,
   DataLabel[BaryonField++] = Vel0Name;
   DataLabel[BaryonField++] = Vel1Name;
   DataLabel[BaryonField++] = Vel2Name;
-  DataLabel[BaryonField++] = RadName;
+  if (AMRFLDNumRadiationFields == 0)
+    DataLabel[BaryonField++] = RadName;
+  if (AMRFLDNumRadiationFields > 0)
+    DataLabel[BaryonField++] = RadName0;
+  if (AMRFLDNumRadiationFields > 1)
+    DataLabel[BaryonField++] = RadName1;
+  if (AMRFLDNumRadiationFields > 2)
+    DataLabel[BaryonField++] = RadName2;
+  if (AMRFLDNumRadiationFields > 3)
+    DataLabel[BaryonField++] = RadName3;
+  if (AMRFLDNumRadiationFields > 4)
+    DataLabel[BaryonField++] = RadName4;
+  if (AMRFLDNumRadiationFields > 5)
+    DataLabel[BaryonField++] = RadName5;
+  if (AMRFLDNumRadiationFields > 6)
+    DataLabel[BaryonField++] = RadName6;
+  if (AMRFLDNumRadiationFields > 7)
+    DataLabel[BaryonField++] = RadName7;
+  if (AMRFLDNumRadiationFields > 8)
+    DataLabel[BaryonField++] = RadName8;
+  if (AMRFLDNumRadiationFields > 9)
+    DataLabel[BaryonField++] = RadName9;
   if (RadHydroChemistry > 0) {
     DataLabel[BaryonField++] = DeName;
     DataLabel[BaryonField++] = HIName;
     DataLabel[BaryonField++] = HIIName;
   }
-  if (RadHydroChemistry == 3) {
+  if ((RadHydroChemistry == 3) || (MultiSpecies > 0)) {
     DataLabel[BaryonField++] = HeIName;
     DataLabel[BaryonField++] = HeIIName;
     DataLabel[BaryonField++] = HeIIIName;
   }
+
+  // if using external chemistry/cooling, set rate labels
+  if (RadiativeCooling) {
+    DataLabel[BaryonField++] = kphHIName;
+    DataLabel[BaryonField++] = gammaName;
+    if (RadiativeTransferHydrogenOnly == FALSE) {
+      DataLabel[BaryonField++] = kphHeIName;
+      DataLabel[BaryonField++] = kphHeIIName;
+    }
+    if (MultiSpecies > 1)
+      DataLabel[BaryonField++] = kdissH2IName;
+  }
+
+  // if using the AMRFLDSplit solver, set fields for the emissivity
+  if (ImplicitProblem == 6) {
+    if (AMRFLDNumRadiationFields > 0)
+      DataLabel[BaryonField++] = EtaName0;
+    if (AMRFLDNumRadiationFields > 1)
+      DataLabel[BaryonField++] = EtaName1;
+    if (AMRFLDNumRadiationFields > 2)
+      DataLabel[BaryonField++] = EtaName2;
+    if (AMRFLDNumRadiationFields > 3)
+      DataLabel[BaryonField++] = EtaName3;
+    if (AMRFLDNumRadiationFields > 4)
+      DataLabel[BaryonField++] = EtaName4;
+    if (AMRFLDNumRadiationFields > 5)
+      DataLabel[BaryonField++] = EtaName5;
+    if (AMRFLDNumRadiationFields > 6)
+      DataLabel[BaryonField++] = EtaName6;
+    if (AMRFLDNumRadiationFields > 7)
+      DataLabel[BaryonField++] = EtaName7;
+    if (AMRFLDNumRadiationFields > 8)
+      DataLabel[BaryonField++] = EtaName8;
+    if (AMRFLDNumRadiationFields > 9)
+      DataLabel[BaryonField++] = EtaName9;
+  }
+
   for (int i=0; i<BaryonField; i++) 
     DataUnits[i] = NULL;
 

@@ -49,6 +49,14 @@ struct HierarchyEntry;
 
 //extern int CommunicationDirection;
 
+#ifdef AMR_SOLVE
+#  define AMR_SOLVE_PUBLIC  public:
+#  define AMR_SOLVE_PRIVATE private:
+#else
+#  define AMR_SOLVE_PUBLIC 
+#  define AMR_SOLVE_PRIVATE
+#endif
+
 //struct ParticleEntry {
 //  FLOAT Position[3];
 //  float Mass;
@@ -73,6 +81,9 @@ class grid
 //  General grid class data
 //
   int GridRank;                        // number of dimensions
+
+  AMR_SOLVE_PUBLIC
+
   int GridDimension[MAX_DIMENSION];    // total dimensions of all grids
   int GridStartIndex[MAX_DIMENSION];   // starting index of the active region
                                        //   (zero based)
@@ -80,6 +91,9 @@ class grid
                                        //   (zero based)
   FLOAT GridLeftEdge[MAX_DIMENSION];   // starting pos (active problem space)
   FLOAT GridRightEdge[MAX_DIMENSION];  // ending pos (active problem space)
+
+  AMR_SOLVE_PRIVATE
+
   float dtFixed;                       // current (fixed) timestep
   FLOAT Time;                          // current problem time
   FLOAT OldTime;                       // time corresponding to OldBaryonField
@@ -89,6 +103,13 @@ class grid
 //
 //  Baryon grid data
 //
+
+  AMR_SOLVE_PUBLIC
+
+  FLOAT *CellWidth[MAX_DIMENSION];
+
+  AMR_SOLVE_PRIVATE
+
   int    NumberOfBaryonFields;                        // active baryon fields
   float *BaryonField[MAX_NUMBER_OF_BARYON_FIELDS];    // pointers to arrays
   float *OldBaryonField[MAX_NUMBER_OF_BARYON_FIELDS]; // pointers to old arrays
@@ -96,7 +117,6 @@ class grid
   float *RandomForcingField[MAX_DIMENSION];           // pointers to arrays //AK
   int    FieldType[MAX_NUMBER_OF_BARYON_FIELDS];
   FLOAT *CellLeftEdge[MAX_DIMENSION];
-  FLOAT *CellWidth[MAX_DIMENSION];
   fluxes *BoundaryFluxes;
 
   // For restart dumps
@@ -115,11 +135,17 @@ class grid
 //
 //  Particle data
 //
+
+  AMR_SOLVE_PUBLIC
+
   int    NumberOfParticles;
   FLOAT *ParticlePosition[MAX_DIMENSION];  // pointers to position arrays
+  float *ParticleMass;                     // pointer to mass array
+
+  AMR_SOLVE_PRIVATE
+
   float *ParticleVelocity[MAX_DIMENSION];  // pointers to velocity arrays
   float *ParticleAcceleration[MAX_DIMENSION+1];  // 
-  float *ParticleMass;                     // pointer to mass array
   PINT  *ParticleNumber;                   // unique identifier
   int   *ParticleType;                     // type of particle
   float *ParticleAttribute[MAX_NUMBER_OF_PARTICLE_ATTRIBUTES];
@@ -139,6 +165,8 @@ class grid
 //
 //  Gravity data
 // 
+  AMR_SOLVE_PUBLIC
+
   float *PotentialField;
   float *AccelerationField[MAX_DIMENSION]; // cell cntr acceleration at n+1/2
   float *GravitatingMassField;
@@ -146,9 +174,12 @@ class grid
   int    GravitatingMassFieldDimension[MAX_DIMENSION];
   FLOAT  GravitatingMassFieldCellSize;     // all dimensions must be the same
   float *GravitatingMassFieldParticles;     // for particles only
+  int    GravitatingMassFieldParticlesDimension[MAX_DIMENSION];
+
+  AMR_SOLVE_PRIVATE
+
   FLOAT  GravitatingMassFieldParticlesLeftEdge[MAX_DIMENSION];
   FLOAT  GravitatingMassFieldParticlesCellSize;
-  int    GravitatingMassFieldParticlesDimension[MAX_DIMENSION];
   gravity_boundary_type GravityBoundaryType;
   float  PotentialSum;
 
@@ -186,7 +217,9 @@ class grid
 //
 //  Parallel Information
 //
+  AMR_SOLVE_PUBLIC
   int ProcessorNumber;
+  AMR_SOLVE_PRIVATE
 //
 // Movie Data Format
 //
@@ -204,6 +237,7 @@ class grid
   friend int ExternalBoundary::Prepare(grid *TopGrid);
   friend int ProtoSubgrid::CopyFlaggedZonesFromGrid(grid *Grid);
   friend class Star;
+  friend class AMRFLDSplit;
 #ifdef NEW_PROBLEM_TYPES
   friend class EnzoProblemType;
 #endif
@@ -812,8 +846,8 @@ gradient force to gravitational force for one-zone collapse test. */
 
 /* Set boolean flagging field */
 
-   int SetFlaggingField(int &NumberOfFlaggedCells, int level);
-
+   int SetFlaggingField(int &NumberOfFlaggedCells, int level, 
+			HierarchyEntry *MyHierarchyEntry);
 
 /* Set flagging field from refine regions */
 
@@ -861,6 +895,21 @@ gradient force to gravitational force for one-zone collapse test. */
      (gg #4) */
 
    int FlagCellsToBeRefinedBySlope();
+
+/* Flag all points that require refining by their radiation slope.
+     Returns the number of flagged cells. */
+
+   int FlagCellsToBeRefinedByRadiationGradient();
+
+/* Flag all points that require refining by their opacity slope.
+     Returns the number of flagged cells. */
+
+   int FlagCellsToBeRefinedByOpacity();
+
+/* Flag all points that require refining by their ionization fraction slope.
+     Returns the number of flagged cells. */
+
+   int FlagCellsToBeRefinedByIonizedFraction();
 
 /* Flag all points that require refining by their slope.
      Returns the number of flagged cells.  Returns the number of flagged cells
@@ -911,6 +960,10 @@ gradient force to gravitational force for one-zone collapse test. */
 
    int FlagCellsToBeRefinedByMetallicity(int level);
 
+
+/* Flag all points that require refining based on location -- used for weak scaling tests. */
+
+   int FlagCellsToBeRefinedForWeakScaling(int level, HierarchyEntry *MyHierarchyEntry);
 
 /* Flagging all cell adjacent to a previous flagged cell.  Also, remove all
    Flagged cells in the boundary zones and within one zone of the boundary. */
@@ -1073,10 +1126,20 @@ gradient force to gravitational force for one-zone collapse test. */
 
    int ClearGravitatingMassField();
 
+/* Gravity: allocate & clear the PotentialField 
+   (must be called after InitializeGravitatingMassField). */
+
+   int ClearPotentialField();
+
 /* Gravity & baryons: Copy the parent density field to the extra boundary
       region of GravitatingMassField (if any). */
 
    int CopyParentToGravitatingFieldBoundary(grid *ParentGrid);
+
+/* Gravity: Copy the parent potential field to the extra boundary
+      region of PotentialField (if any). */
+
+   int CopyParentToPotentialFieldBoundary(grid *ParentGrid);
 
 /* Gravity & Particles: allocate & clear the GravitatingMassFieldParticles. */
 
@@ -1268,6 +1331,15 @@ gradient force to gravitational force for one-zone collapse test. */
    float* AccessRadPressure1();
    float* AccessRadPressure2();
    float* AccessEmissivity0();
+   float* AccessEmissivity1();
+   float* AccessEmissivity2();
+   float* AccessEmissivity3();
+   float* AccessEmissivity4();
+   float* AccessEmissivity5();
+   float* AccessEmissivity6();
+   float* AccessEmissivity7();
+   float* AccessEmissivity8();
+   float* AccessEmissivity9();
    float* AccessRadiationFrequency0();
    float* AccessRadiationFrequency1();
    float* AccessRadiationFrequency2();
@@ -1278,6 +1350,8 @@ gradient force to gravitational force for one-zone collapse test. */
    float* AccessRadiationFrequency7();
    float* AccessRadiationFrequency8();
    float* AccessRadiationFrequency9();
+   float* AccessPotentialField();
+   float* AccessGravitatingMassField();
 
 
 // -------------------------------------------------------------------------
@@ -2051,6 +2125,7 @@ int zEulerSweep(int j, int NumberOfSubgrids, fluxes *SubgridFluxes[],
 			  float CosmologySimulationInitialFractionMetalIa,
 #ifdef TRANSFER
 			  float RadHydroInitialRadiationEnergy,
+			  int   AMRFLDNumRadiationFields,
 #endif
 			  int   CosmologySimulationUseMetallicityField,
 			  PINT &CurrentNumberOfParticles,
@@ -2160,8 +2235,19 @@ int zEulerSweep(int j, int NumberOfSubgrids, fluxes *SubgridFluxes[],
 				  float V1Const, float V2Const, float TEConst, 
 				  float RadConst, int local);
 
+  /* Multi-frequency ionization test problem: initialize grid (SUCCESS or FAIL) */
+  int MFIonizationTestInitializeGrid(int NumChem, float DensityConst, 
+				     float V0Const, float V1Const, 
+				     float V2Const, float IEConst, 
+				     float FSConst, float E1Const, 
+				     float E2Const, float E3Const, 
+				     float E1Scale, float E2Scale, 
+				     float E3Scale, float HMassFrac, 
+				     float InitFracHII, float InitFracHeII,
+				     float InitFracHeIII, int local);
+
   /* FLD Radiation test problem: initialize grid (SUCCESS or FAIL) */
-  int RadHydroConstTestInitializeGrid(int NumChem, float DensityConst, 
+  int RadHydroConstTestInitializeGrid(int NumChem, int NumBins, float DensityConst, 
 				      float V0Const, float V1Const, 
 				      float V2Const, float IEConst, 
 				      float EgConst, float HMassFrac, 
@@ -2169,15 +2255,16 @@ int zEulerSweep(int j, int NumberOfSubgrids, fluxes *SubgridFluxes[],
 				      float InitFracHeIII, int local);
 
   /* FLD Radiation ionization test problem: initialize grid (SUCCESS or FAIL) */
-  int RHIonizationTestInitializeGrid(int NumChem, float DensityConst, 
+  int RHIonizationTestInitializeGrid(int NumChem, int NumBins, float DensityConst, 
 				     float V0Const, float V1Const, 
 				     float V2Const, float IEConst, 
 				     float EgConst, float HMassFrac, 
 				     float InitFracHII, float InitFracHeII, 
-				     float InitFracHeIII, int local);
+				     float InitFracHeIII, int NumParticles, 
+				     int local);
 
   /* FLD Radiation clump ionization problem: initialize grid (SUCCESS or FAIL) */
-  int RHIonizationClumpInitializeGrid(int NumChem, float NumDensityIn, 
+  int RHIonizationClumpInitializeGrid(int NumChem, int NumBins, float NumDensityIn, 
 				      float NumDensityOut, float V0Const,
 				      float V1Const, float V2Const,
 				      float IEConstIn, float IEConstOut, 
@@ -2188,7 +2275,7 @@ int zEulerSweep(int j, int NumberOfSubgrids, fluxes *SubgridFluxes[],
 				      float ClumpRadius, int local);
 
   /* FLD Rad r^{-2} density ionization problem: initialize grid (SUCCESS or FAIL) */
-  int RHIonizationSteepInitializeGrid(int NumChem, float NumDensity, 
+  int RHIonizationSteepInitializeGrid(int NumChem, int NumBins, float NumDensity, 
 				      float DensityRadius, float DensityCenter0, 
 				      float DensityCenter1, float DensityCenter2, 
 				      float V0Const, float V1Const, 
@@ -2198,8 +2285,8 @@ int zEulerSweep(int j, int NumberOfSubgrids, fluxes *SubgridFluxes[],
 				      float InitFracHeIII, int local);
 
   /* FLD Radiation test problem: cosmological HII ioniztion (SUCCESS or FAIL) */
-  int CosmoIonizationInitializeGrid(int NumChem, float VxConst, float VyConst, 
-				    float VzConst, float IEConst, 
+  int CosmoIonizationInitializeGrid(int NumChem, int NumBins, float VxConst, 
+				    float VyConst, float VzConst, float IEConst, 
 				    float EgConst, float HMassFrac, 
 				    float InitFracHII, float InitFracHeII, 
 				    float InitFracHeIII, float OmegaBaryonNow, 

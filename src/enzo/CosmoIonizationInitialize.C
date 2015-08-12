@@ -31,13 +31,17 @@
 #include "TopGridData.h"
  
 // default constants
-#define DEFAULT_MU 0.6       // mean molecular mass
-#define MIN_TEMP 1.0         // minimum temperature [K]
-#define MAX_INITIAL_GRIDS 10
+#define DEFAULT_MU 0.6           // mean molecular mass
+#define MIN_TEMP 1.0             // minimum temperature [K]
+#define MAX_INITIAL_PATCHES 100  // max number of parameter file defined subgrids
 
 
 // function prototypes
 int InitializeRateData(FLOAT Time);
+void AddLevel(LevelHierarchyEntry *Array[], HierarchyEntry *Grid, int level);
+int RebuildHierarchy(TopGridData *MetaData,
+		     LevelHierarchyEntry *LevelArray[], int level);
+
 
  
 int CosmoIonizationInitialize(FILE *fptr, FILE *Outfptr,
@@ -45,8 +49,8 @@ int CosmoIonizationInitialize(FILE *fptr, FILE *Outfptr,
 			      TopGridData &MetaData, int local)
 {
 #ifdef TRANSFER
-  if (MyProcessorNumber == ROOT_PROCESSOR)
-    printf("Entering CosmoIonizationInitialize routine\n");
+//   if (MyProcessorNumber == ROOT_PROCESSOR)
+//     printf("Entering CosmoIonizationInitialize routine\n");
 
   char *kphHIName    = "HI_kph";
   char *kphHeIName   = "HeI_kph";
@@ -59,17 +63,38 @@ int CosmoIonizationInitialize(FILE *fptr, FILE *Outfptr,
   char *Vel1Name  = "x-velocity";
   char *Vel2Name  = "y-velocity";
   char *Vel3Name  = "z-velocity";
-  char *RadName   = "Grey_Radiation_Energy";
   char *HIName    = "HI_Density";
   char *HIIName   = "HII_Density";
   char *HeIName   = "HeI_Density";
   char *HeIIName  = "HeII_Density";
   char *HeIIIName = "HeIII_Density";
   char *DeName    = "Electron_Density";
+  char *RadName   = "Grey_Radiation_Energy";
+  char *RadName0  = "Radiation0";
+  char *RadName1  = "Radiation1";
+  char *RadName2  = "Radiation2";
+  char *RadName3  = "Radiation3";
+  char *RadName4  = "Radiation4";
+  char *RadName5  = "Radiation5";
+  char *RadName6  = "Radiation6";
+  char *RadName7  = "Radiation7";
+  char *RadName8  = "Radiation8";
+  char *RadName9  = "Radiation9";
+  char *EtaName   = "Emissivity";
+  char *EtaName0  = "Emissivity0";
+  char *EtaName1  = "Emissivity1";
+  char *EtaName2  = "Emissivity2";
+  char *EtaName3  = "Emissivity3";
+  char *EtaName4  = "Emissivity4";
+  char *EtaName5  = "Emissivity5";
+  char *EtaName6  = "Emissivity6";
+  char *EtaName7  = "Emissivity7";
+  char *EtaName8  = "Emissivity8";
+  char *EtaName9  = "Emissivity9";
  
   // local declarations
-  char  line[MAX_LINE_LENGTH];
-  int   dim, ret;
+  char line[MAX_LINE_LENGTH];
+  int  i, j, dim, gridnum, ret, level, patch;
  
   // Setup and parameters:
   float RadHydroX0Velocity           = 0.0;
@@ -83,6 +108,7 @@ int CosmoIonizationInitialize(FILE *fptr, FILE *Outfptr,
   float RadHydroInitialFractionHeIII = 0.0;
   float RadHydroOmegaBaryonNow       = 0.2;
   int   RadHydroChemistry            = 1;
+  int   AMRFLDNumRadiationFields     = 0;    // grey solver
 
   // overwrite input from RadHydroParamFile file, if it exists
   if (MetaData.RadHydroParameterFname != NULL) {
@@ -96,6 +122,8 @@ int CosmoIonizationInitialize(FILE *fptr, FILE *Outfptr,
 		      &RadHydroX2Velocity);
 	ret += sscanf(line, "RadHydroChemistry = %"ISYM, 
 		      &RadHydroChemistry);
+	ret += sscanf(line, "AMRFLDNumRadiationFields = %"ISYM, 
+		      &AMRFLDNumRadiationFields);
 	ret += sscanf(line, "RadHydroTemperature = %"FSYM, 
 		      &RadHydroTemperature);
 	ret += sscanf(line, "RadHydroRadiationEnergy = %"FSYM, 
@@ -104,12 +132,10 @@ int CosmoIonizationInitialize(FILE *fptr, FILE *Outfptr,
 		      &RadHydroInitialFractionHII);
 	ret += sscanf(line, "RadHydroHFraction = %"FSYM, 
 		      &RadHydroHydrogenMassFraction);
-	if ((RadHydroChemistry == 3) || (MultiSpecies == 1)) {
-	  ret += sscanf(line, "RadHydroInitialFractionHeII = %"FSYM, 
-			&RadHydroInitialFractionHeII);
-	  ret += sscanf(line, "RadHydroInitialFractionHeIII = %"FSYM, 
-			&RadHydroInitialFractionHeIII);
-	}
+	ret += sscanf(line, "RadHydroInitialFractionHeII = %"FSYM, 
+		      &RadHydroInitialFractionHeII);
+	ret += sscanf(line, "RadHydroInitialFractionHeIII = %"FSYM, 
+		      &RadHydroInitialFractionHeIII);
 	ret += sscanf(line, "RadHydroOmegaBaryonNow = %"FSYM, 
 		      &RadHydroOmegaBaryonNow);
 
@@ -131,6 +157,10 @@ int CosmoIonizationInitialize(FILE *fptr, FILE *Outfptr,
       fprintf(stderr,"Error in InitializeRateData.\n");
       return FAIL;
     }
+
+  // since AMRFLD solver no longer relies on RadHydroChemistry input, deduce the value here
+  if (ImplicitProblem == 6) 
+    RadHydroChemistry = (RadiativeTransferHydrogenOnly) ? 1 : 3;
 
   // convert input temperature to internal energy
   RadHydroTemperature = max(RadHydroTemperature,MIN_TEMP); // enforce minimum
@@ -159,11 +189,12 @@ int CosmoIonizationInitialize(FILE *fptr, FILE *Outfptr,
   // compute the internal energy
   float RadHydroIEnergy = kb*RadHydroTemperature/mu/mp/(Gamma-1.0);	
 
-  // set up the grid(s) on this level
-  HierarchyEntry *Temp = &TopGrid;
-  while (Temp != NULL) {
-    if (Temp->GridData->CosmoIonizationInitializeGrid(
-		        RadHydroChemistry, RadHydroX0Velocity, 
+  /////////////////
+  // Set up the TopGrid as usual
+  HierarchyEntry *TempGrid = &TopGrid;
+  while (TempGrid != NULL) {
+    if (TempGrid->GridData->CosmoIonizationInitializeGrid(
+			RadHydroChemistry, AMRFLDNumRadiationFields, RadHydroX0Velocity, 
 			RadHydroX1Velocity, RadHydroX2Velocity, 
 			RadHydroIEnergy, RadHydroRadiationEnergy, 
 			RadHydroHydrogenMassFraction, 
@@ -174,7 +205,7 @@ int CosmoIonizationInitialize(FILE *fptr, FILE *Outfptr,
       fprintf(stderr, "Error in CosmoIonizationInitializeGrid.\n");
       return FAIL;
     }
-    Temp = Temp->NextGridThisLevel;
+    TempGrid = TempGrid->NextGridThisLevel;
   }
 
 
@@ -187,7 +218,28 @@ int CosmoIonizationInitialize(FILE *fptr, FILE *Outfptr,
   DataLabel[BaryonField++] = Vel1Name;
   DataLabel[BaryonField++] = Vel2Name;
   DataLabel[BaryonField++] = Vel3Name;
-  DataLabel[BaryonField++] = RadName;
+  if (AMRFLDNumRadiationFields == 0)
+    DataLabel[BaryonField++] = RadName;
+  if (AMRFLDNumRadiationFields > 0)
+    DataLabel[BaryonField++] = RadName0;
+  if (AMRFLDNumRadiationFields > 1)
+    DataLabel[BaryonField++] = RadName1;
+  if (AMRFLDNumRadiationFields > 2)
+    DataLabel[BaryonField++] = RadName2;
+  if (AMRFLDNumRadiationFields > 3)
+    DataLabel[BaryonField++] = RadName3;
+  if (AMRFLDNumRadiationFields > 4)
+    DataLabel[BaryonField++] = RadName4;
+  if (AMRFLDNumRadiationFields > 5)
+    DataLabel[BaryonField++] = RadName5;
+  if (AMRFLDNumRadiationFields > 6)
+    DataLabel[BaryonField++] = RadName6;
+  if (AMRFLDNumRadiationFields > 7)
+    DataLabel[BaryonField++] = RadName7;
+  if (AMRFLDNumRadiationFields > 8)
+    DataLabel[BaryonField++] = RadName8;
+  if (AMRFLDNumRadiationFields > 9)
+    DataLabel[BaryonField++] = RadName9;
   DataLabel[BaryonField++] = DeName;
   DataLabel[BaryonField++] = HIName;
   DataLabel[BaryonField++] = HIIName;
@@ -207,6 +259,30 @@ int CosmoIonizationInitialize(FILE *fptr, FILE *Outfptr,
     }
     if (MultiSpecies > 1)
       DataLabel[BaryonField++] = kdissH2IName;
+  }
+
+  // if using the AMRFLDSplit solver, set fields for the emissivity
+  if (ImplicitProblem == 6) {
+    if (AMRFLDNumRadiationFields > 0)
+      DataLabel[BaryonField++] = EtaName0;
+    if (AMRFLDNumRadiationFields > 1)
+      DataLabel[BaryonField++] = EtaName1;
+    if (AMRFLDNumRadiationFields > 2)
+      DataLabel[BaryonField++] = EtaName2;
+    if (AMRFLDNumRadiationFields > 3)
+      DataLabel[BaryonField++] = EtaName3;
+    if (AMRFLDNumRadiationFields > 4)
+      DataLabel[BaryonField++] = EtaName4;
+    if (AMRFLDNumRadiationFields > 5)
+      DataLabel[BaryonField++] = EtaName5;
+    if (AMRFLDNumRadiationFields > 6)
+      DataLabel[BaryonField++] = EtaName6;
+    if (AMRFLDNumRadiationFields > 7)
+      DataLabel[BaryonField++] = EtaName7;
+    if (AMRFLDNumRadiationFields > 8)
+      DataLabel[BaryonField++] = EtaName8;
+    if (AMRFLDNumRadiationFields > 9)
+      DataLabel[BaryonField++] = EtaName9;
   }
 
   for (int i=0; i<BaryonField; i++) 

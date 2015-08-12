@@ -12,7 +12,7 @@
 /  Evolve Routine for split radiation-chemistry system
 /
 /  written by: Daniel Reynolds
-/  date:       July 2009
+/  date:       November 2010
 /  modified1:
 /
 /  PURPOSE:
@@ -46,14 +46,28 @@ int RadiationGetUnits(float *RadiationUnits, FLOAT Time);
 // Prior to completion, the routine also updates the maximum time step the 
 // overall Grid module can take to meet a maximum subcycling ratio of 
 // radiation to hydrodynamics.
-int gFLDSplit::Evolve(HierarchyEntry *ThisGrid, float dthydro)
+//int gFLDSplit::Evolve(HierarchyEntry *ThisGrid, float dthydro)
+//int gFLDSplit::Evolve(LevelHierarchyEntry *LevelArray[], int level, float dthydro)
+int gFLDSplit::Evolve(LevelHierarchyEntry *LevelArray[], int level, 
+		      HierarchyEntry *Grids[], int NumberOfGrids,
+		      TopGridData *MetaData, ExternalBoundary *Exterior, 
+#ifdef FAST_SIB
+		      SiblingGridList SiblingList[],
+#endif
+		      float dthydro)
 {
 
 //   if (debug)  printf("Entering gFLDSplit::Evolve routine\n");
 
+  // Iterate over all grids on this level
+  LevelHierarchyEntry *Temp;
+  HierarchyEntry* ThisGrid;
+  for (Temp = LevelArray[0]; Temp; Temp = Temp->NextGridThisLevel) {
+    ThisGrid = Temp->GridHierarchyEntry;
+
   // Only continue if we own this grid
   if (MyProcessorNumber != ThisGrid->GridData->ReturnProcessorNumber())
-    return SUCCESS;
+    continue;
 
 #ifdef USE_MPI
   //  check that MyProcessorNumber agrees with MPI process ID
@@ -482,6 +496,8 @@ int gFLDSplit::Evolve(HierarchyEntry *ThisGrid, float dthydro)
   RTtime += ftime-stime;
   if (debug)  printf("RadHydro cumulative time = %g (HYPRE = %g,  Chem = %g)\n\n",
 		     RTtime, HYPREtime, ChemTime);
+
+  } // for Temp = ...
 
   // Return
   return SUCCESS;

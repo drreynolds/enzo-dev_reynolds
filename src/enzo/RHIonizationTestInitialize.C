@@ -25,17 +25,20 @@
 #include "ExternalBoundary.h"
 #include "Grid.h"
 #include "Hierarchy.h"
+#include "LevelHierarchy.h"
 #include "TopGridData.h"
 
 
 /* default constants */
-#define DEFAULT_MU 0.6       // mean molecular mass
-#define MIN_TEMP 1.0         // minimum temperature [K]
-
+#define DEFAULT_MU 0.6           // mean molecular mass
+#define MIN_TEMP 1.0             // minimum temperature [K]
+#define MAX_INITIAL_PATCHES 100  // max number of parameter file defined subgrids
 
 // function prototypes
 int InitializeRateData(FLOAT Time);
-
+void AddLevel(LevelHierarchyEntry *Array[], HierarchyEntry *Grid, int level);
+int RebuildHierarchy(TopGridData *MetaData,
+		     LevelHierarchyEntry *LevelArray[], int level);
 
 
 
@@ -58,18 +61,41 @@ int RHIonizationTestInitialize(FILE *fptr, FILE *Outfptr,
   char *Vel0Name  = "x-velocity";
   char *Vel1Name  = "y-velocity";
   char *Vel2Name  = "z-velocity";
-  char *RadName   = "Grey_Radiation_Energy";
   char *HIName    = "HI_Density";
   char *HIIName   = "HII_Density";
   char *HeIName   = "HeI_Density";
   char *HeIIName  = "HeII_Density";
   char *HeIIIName = "HeIII_Density";
   char *DeName    = "Electron_Density";
+  char *GPotName  = "Grav_Potential";
+  char *RadName   = "Grey_Radiation_Energy";
+  char *RadName0  = "Radiation0";
+  char *RadName1  = "Radiation1";
+  char *RadName2  = "Radiation2";
+  char *RadName3  = "Radiation3";
+  char *RadName4  = "Radiation4";
+  char *RadName5  = "Radiation5";
+  char *RadName6  = "Radiation6";
+  char *RadName7  = "Radiation7";
+  char *RadName8  = "Radiation8";
+  char *RadName9  = "Radiation9";
+  char *EtaName   = "Emissivity";
+  char *EtaName0  = "Emissivity0";
+  char *EtaName1  = "Emissivity1";
+  char *EtaName2  = "Emissivity2";
+  char *EtaName3  = "Emissivity3";
+  char *EtaName4  = "Emissivity4";
+  char *EtaName5  = "Emissivity5";
+  char *EtaName6  = "Emissivity6";
+  char *EtaName7  = "Emissivity7";
+  char *EtaName8  = "Emissivity8";
+  char *EtaName9  = "Emissivity9";
 
   // local declarations
   char line[MAX_LINE_LENGTH];
-  int  dim, ret;
+  int  i, j, dim, gridnum, ret, level, patch, tile;
 
+  /////////////////
   // Setup and parameters:
   //  1. ambient density (should be very small) - free parameter
   //  2. ambient gas velocity - free parameter
@@ -93,6 +119,9 @@ int RHIonizationTestInitialize(FILE *fptr, FILE *Outfptr,
   float RadHydroInitialFractionHeII  = 0.0;
   float RadHydroInitialFractionHeIII = 0.0;
   int   RadHydroChemistry            = 1;
+  int   AMRFLDNumRadiationFields     = 0;    // grey solver
+  int   TestGravityNumberOfParticles = 0;    // number of test particles
+
 
   // overwrite input from RadHydroParamFile file, if it exists
   if (MetaData.RadHydroParameterFname != NULL) {
@@ -106,6 +135,8 @@ int RHIonizationTestInitialize(FILE *fptr, FILE *Outfptr,
 		      &RadHydroX2Velocity);
 	ret += sscanf(line, "RadHydroChemistry = %"ISYM, 
 		      &RadHydroChemistry);
+	ret += sscanf(line, "AMRFLDNumRadiationFields = %"ISYM, 
+		      &AMRFLDNumRadiationFields);
 	ret += sscanf(line, "RadHydroDensity = %"FSYM, 
 		      &RadHydroDensity);
 	ret += sscanf(line, "RadHydroTemperature = %"FSYM, 
@@ -114,18 +145,16 @@ int RHIonizationTestInitialize(FILE *fptr, FILE *Outfptr,
 		      &RadHydroIEnergy);
 	ret += sscanf(line, "RadHydroRadiationEnergy = %"FSYM, 
 		      &RadHydroRadiationEnergy);
-	if (RadHydroChemistry > 0) {
-	  ret += sscanf(line, "RadHydroInitialFractionHII = %"FSYM, 
-			&RadHydroInitialFractionHII);
-	  ret += sscanf(line, "RadHydroHFraction = %"FSYM, 
-			&RadHydroHydrogenMassFraction);
-	}
-	if ((RadHydroChemistry == 3) || (MultiSpecies == 1)) {
-	  ret += sscanf(line, "RadHydroInitialFractionHeII = %"FSYM, 
-			&RadHydroInitialFractionHeII);
-	  ret += sscanf(line, "RadHydroInitialFractionHeIII = %"FSYM, 
-			&RadHydroInitialFractionHeIII);
-	}
+	ret += sscanf(line, "TestGravityNumberOfParticles = %"ISYM,
+		      &TestGravityNumberOfParticles);
+	ret += sscanf(line, "RadHydroInitialFractionHII = %"FSYM, 
+		      &RadHydroInitialFractionHII);
+	ret += sscanf(line, "RadHydroHFraction = %"FSYM, 
+		      &RadHydroHydrogenMassFraction);
+	ret += sscanf(line, "RadHydroInitialFractionHeII = %"FSYM, 
+		      &RadHydroInitialFractionHeII);
+	ret += sscanf(line, "RadHydroInitialFractionHeIII = %"FSYM, 
+		      &RadHydroInitialFractionHeIII);
  
       } // end input from parameter file
       fclose(RHfptr);
@@ -135,24 +164,24 @@ int RHIonizationTestInitialize(FILE *fptr, FILE *Outfptr,
   /* error checking */
   if (Mu != DEFAULT_MU) {
     if (MyProcessorNumber == ROOT_PROCESSOR)
-      fprintf(stderr, "warning: mu =%f assumed in initialization; setting Mu = %f for consistency.\n", DEFAULT_MU);
+      fprintf(stderr, "warning: mu = %f assumed in initialization; setting Mu = %f for consistency.\n", Mu, DEFAULT_MU);
     Mu = DEFAULT_MU;
   }
 
   // set up CoolData object if not already set up
   if (CoolData.ceHI == NULL) 
-    if (InitializeRateData(MetaData.Time) == FAIL) {
-      fprintf(stderr,"Error in InitializeRateData.\n");
-      return FAIL;
-    }
+    if (InitializeRateData(MetaData.Time) == FAIL) 
+      ENZO_FAIL("Error in InitializeRateData.");
+
+  // since AMRFLD solver no longer relies on RadHydroChemistry input, deduce the value here
+  if (ImplicitProblem == 6) 
+    RadHydroChemistry = (RadiativeTransferHydrogenOnly) ? 1 : 3;
 
   // if temperature specified and not internal energy, perform conversion here
   if (RadHydroIEnergy == -1.0) {
     if (RadHydroTemperature == -1.0) {
-      fprintf(stderr,"Initialize error: either temperature or IEnergy required!\n");
-      return FAIL;
-    }
-    else {
+      ENZO_FAIL("Initialize error: either temperature or IEnergy required!");
+    } else {
       RadHydroTemperature = max(RadHydroTemperature,MIN_TEMP); // enforce minimum
       float mp = 1.67262171e-24;    // proton mass [g]
       float kb = 1.3806504e-16;     // boltzmann constant [erg/K]
@@ -180,27 +209,27 @@ int RHIonizationTestInitialize(FILE *fptr, FILE *Outfptr,
 	mu = RadHydroDensity/num_dens;
       }
       else {
-	fprintf(stderr,"Initialize error: NChem != {0,1,3}\n");
-	return FAIL;	
+	ENZO_FAIL("Initialize error: NChem != {0,1,3}");
       }
       // compute the internal energy
       RadHydroIEnergy = kb*RadHydroTemperature/mu/mp/(Gamma-1.0);	
     }
   }
 
-  // set up the grid(s) on this level
-  HierarchyEntry *Temp = &TopGrid;
-  while (Temp != NULL) {
-    if (Temp->GridData->RHIonizationTestInitializeGrid(
-		        RadHydroChemistry, RadHydroDensity, RadHydroX0Velocity,
-			RadHydroX1Velocity, RadHydroX2Velocity, RadHydroIEnergy,
-			RadHydroRadiationEnergy, RadHydroHydrogenMassFraction,
-			RadHydroInitialFractionHII, RadHydroInitialFractionHeII,
-			RadHydroInitialFractionHeIII, local) == FAIL) {
-      fprintf(stderr, "Error in RHIonizationTestInitializeGrid.\n");
-      return FAIL;
+  /////////////////
+  // Set up the TopGrid as usual
+  HierarchyEntry *TempGrid = &TopGrid;
+  while (TempGrid != NULL) {
+    if (TempGrid->GridData->RHIonizationTestInitializeGrid(
+		        RadHydroChemistry, AMRFLDNumRadiationFields, RadHydroDensity, 
+			RadHydroX0Velocity, RadHydroX1Velocity, RadHydroX2Velocity, 
+			RadHydroIEnergy, RadHydroRadiationEnergy, 
+			RadHydroHydrogenMassFraction, RadHydroInitialFractionHII, 
+			RadHydroInitialFractionHeII, RadHydroInitialFractionHeIII, 
+			TestGravityNumberOfParticles, local) == FAIL) {
+      ENZO_FAIL("Error in RHIonizationTestInitializeGrid!");
     }
-    Temp = Temp->NextGridThisLevel;
+    TempGrid = TempGrid->NextGridThisLevel;
   }
 
   // set up field names and units
@@ -212,7 +241,28 @@ int RHIonizationTestInitialize(FILE *fptr, FILE *Outfptr,
   DataLabel[BaryonField++] = Vel0Name;
   DataLabel[BaryonField++] = Vel1Name;
   DataLabel[BaryonField++] = Vel2Name;
-  DataLabel[BaryonField++] = RadName;
+  if (AMRFLDNumRadiationFields == 0)
+    DataLabel[BaryonField++] = RadName;
+  if (AMRFLDNumRadiationFields > 0)
+    DataLabel[BaryonField++] = RadName0;
+  if (AMRFLDNumRadiationFields > 1)
+    DataLabel[BaryonField++] = RadName1;
+  if (AMRFLDNumRadiationFields > 2)
+    DataLabel[BaryonField++] = RadName2;
+  if (AMRFLDNumRadiationFields > 3)
+    DataLabel[BaryonField++] = RadName3;
+  if (AMRFLDNumRadiationFields > 4)
+    DataLabel[BaryonField++] = RadName4;
+  if (AMRFLDNumRadiationFields > 5)
+    DataLabel[BaryonField++] = RadName5;
+  if (AMRFLDNumRadiationFields > 6)
+    DataLabel[BaryonField++] = RadName6;
+  if (AMRFLDNumRadiationFields > 7)
+    DataLabel[BaryonField++] = RadName7;
+  if (AMRFLDNumRadiationFields > 8)
+    DataLabel[BaryonField++] = RadName8;
+  if (AMRFLDNumRadiationFields > 9)
+    DataLabel[BaryonField++] = RadName9;
   if (RadHydroChemistry > 0) {
     DataLabel[BaryonField++] = DeName;
     DataLabel[BaryonField++] = HIName;
@@ -236,6 +286,34 @@ int RHIonizationTestInitialize(FILE *fptr, FILE *Outfptr,
       DataLabel[BaryonField++] = kdissH2IName;
   }
 
+  // if using the AMRFLDSplit solver, set fields for the emissivity
+  if (ImplicitProblem == 6) {
+    if (AMRFLDNumRadiationFields > 0)
+      DataLabel[BaryonField++] = EtaName0;
+    if (AMRFLDNumRadiationFields > 1)
+      DataLabel[BaryonField++] = EtaName1;
+    if (AMRFLDNumRadiationFields > 2)
+      DataLabel[BaryonField++] = EtaName2;
+    if (AMRFLDNumRadiationFields > 3)
+      DataLabel[BaryonField++] = EtaName3;
+    if (AMRFLDNumRadiationFields > 4)
+      DataLabel[BaryonField++] = EtaName4;
+    if (AMRFLDNumRadiationFields > 5)
+      DataLabel[BaryonField++] = EtaName5;
+    if (AMRFLDNumRadiationFields > 6)
+      DataLabel[BaryonField++] = EtaName6;
+    if (AMRFLDNumRadiationFields > 7)
+      DataLabel[BaryonField++] = EtaName7;
+    if (AMRFLDNumRadiationFields > 8)
+      DataLabel[BaryonField++] = EtaName8;
+    if (AMRFLDNumRadiationFields > 9)
+      DataLabel[BaryonField++] = EtaName9;
+  }
+
+  // if using gravity, set a field for the gravitational potential
+  if (SelfGravity)
+    DataLabel[BaryonField++] = GPotName;
+
   for (int i=0; i<BaryonField; i++) 
     DataUnits[i] = NULL;
 
@@ -243,8 +321,7 @@ int RHIonizationTestInitialize(FILE *fptr, FILE *Outfptr,
 
 #else
 
-  fprintf(stderr,"Error: TRANSFER must be enabled for this test!\n");
-  return FAIL;
+  ENZO_FAIL("Error: TRANSFER must be enabled for this test!");
  
 #endif
 

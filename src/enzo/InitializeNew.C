@@ -159,6 +159,13 @@ int FSMultiSourceInitialize(FILE *fptr, FILE *Outfptr,
 			    HierarchyEntry &TopGrid,
 			    TopGridData &MetaData, int local);
 
+int MFIonizationTestInitialize(FILE *fptr, FILE *Outfptr,
+			       HierarchyEntry &TopGrid,
+			       TopGridData &MetaData, int local,
+			       float FSRadiation, float Radiation1,
+			       float Radiation2, float Radiation3,
+			       float E1Units, float E2Units, float E3Units);
+
 int RadHydroConstTestInitialize(FILE *fptr, FILE *Outfptr,
 				HierarchyEntry &TopGrid,
 				TopGridData &MetaData, int local);
@@ -685,8 +692,10 @@ int InitializeNew(char *filename, HierarchyEntry &TopGrid,
   if ( (ProblemType == 404) || (ProblemType == 405) )
     ret = RadHydroRadShockInitialize(fptr, Outfptr, TopGrid, MetaData, 0);
 
-  // 410/411) Radiation-Hydrodynamics tests 10 & 11 -- HI ionization (static)
-  if ((ProblemType == 410) || (ProblemType == 411))
+  // 410/411) Radiation-Hydrodynamics tests 10,11,17,18
+  //          -- HI ionization (static)
+  if ((ProblemType == 410) || (ProblemType == 411) || 
+      (ProblemType == 417) || (ProblemType == 418))
     ret = RHIonizationTestInitialize(fptr, Outfptr, TopGrid, MetaData, 0);
 
   // 412) Radiation-Hydrodynamics test 12 -- HI ionization of a clump
@@ -705,6 +714,12 @@ int InitializeNew(char *filename, HierarchyEntry &TopGrid,
   // 450-452) Free-streaming radiation tests
   if ((ProblemType == 450) || (ProblemType == 451) || (ProblemType == 452))
     ret = FSMultiSourceInitialize(fptr, Outfptr, TopGrid, MetaData, 0);
+
+
+  // 460-462) Multi-frequency/multi-species tests
+  if ((ProblemType == 460) || (ProblemType == 462))
+    ret = MFIonizationTestInitialize(fptr, Outfptr, TopGrid, MetaData, 0,
+				     0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0);
 #endif /* TRANSFER */
 
   // 500) MHD blast initializer (many variants included here)
