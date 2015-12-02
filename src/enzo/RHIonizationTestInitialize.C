@@ -211,6 +211,9 @@ int RHIonizationTestInitialize(FILE *fptr, FILE *Outfptr,
       else {
 	ENZO_FAIL("Initialize error: NChem != {0,1,3}");
       }
+      // correct mu if using a special model
+      if ((RadHydroModel == 4) || (RadHydroModel == 5)) 
+	mu = DEFAULT_MU;
       // compute the internal energy
       RadHydroIEnergy = kb*RadHydroTemperature/mu/mp/(Gamma-1.0);	
     }
