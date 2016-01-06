@@ -73,6 +73,7 @@ int AMRFLDSplit::FillRates(LevelHierarchyEntry *LevelArray[], int level) {
 	float *photogamma = Temp->GridHierarchyEntry->GridData->AccessPhotoGamma();
 	float *dissH2I    = Temp->GridHierarchyEntry->GridData->AccessKDissH2I();
 	float *HI         = Temp->GridHierarchyEntry->GridData->AccessHIDensity();
+        float *rho        = Temp->GridHierarchyEntry->GridData->AccessDensity();
 	float *HeI=NULL, *HeII=NULL;
 	if (RadiativeTransferHydrogenOnly == FALSE) {
 	  HeI  = Temp->GridHierarchyEntry->GridData->AccessHeIDensity();
@@ -137,10 +138,10 @@ int AMRFLDSplit::FillRates(LevelHierarchyEntry *LevelArray[], int level) {
 	  float GHeIconst  = phScale*ErUn*intHeating_HeI[ibin];
 	  float GHeIIconst = phScale*ErUn*intHeating_HeII[ibin];
 	  if (RadiativeTransferHydrogenOnly) {
-	    for (i=0; i<size; i++)  photogamma[i] += Enew[i]*GHIconst;
+	    for (i=0; i<size; i++)  photogamma[i] += Enew[i]*GHIconst/rho[i];
 	  } else {
 	    for (i=0; i<size; i++)  
-	      photogamma[i] += Enew[i] * (GHIconst*HI[i] + GHeIconst*HeI[i] + GHeIIconst*HeII[i])/HI[i];
+              photogamma[i] += Enew[i] * (GHIconst*HI[i] + GHeIconst*HeI[i]/4.0 + GHeIIconst*HeII[i]/4.0)/HI[i]/rho[i];
 	  }
 
 	}  // end loop over bins
