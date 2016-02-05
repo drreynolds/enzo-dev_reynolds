@@ -138,10 +138,10 @@ int AMRFLDSplit::FillRates(LevelHierarchyEntry *LevelArray[], int level) {
 	  float GHeIconst  = phScale*ErUn*intHeating_HeI[ibin];
 	  float GHeIIconst = phScale*ErUn*intHeating_HeII[ibin];
 	  if (RadiativeTransferHydrogenOnly) {
-	    for (i=0; i<size; i++)  photogamma[i] += Enew[i]*GHIconst/rho[i];
+	    for (i=0; i<size; i++)  photogamma[i] += Enew[i]*GHIconst;
 	  } else {
 	    for (i=0; i<size; i++)  
-              photogamma[i] += Enew[i] * (GHIconst*HI[i] + GHeIconst*HeI[i]/4.0 + GHeIIconst*HeII[i]/4.0)/HI[i]/rho[i];
+              photogamma[i] += Enew[i] * (GHIconst*HI[i] + GHeIconst*HeI[i]/4.0 + GHeIIconst*HeII[i]/4.0)/HI[i];
 	  }
 
 	}  // end loop over bins
