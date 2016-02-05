@@ -73,7 +73,6 @@ int AMRFLDSplit::FillRates(LevelHierarchyEntry *LevelArray[], int level) {
 	float *photogamma = Temp->GridHierarchyEntry->GridData->AccessPhotoGamma();
 	float *dissH2I    = Temp->GridHierarchyEntry->GridData->AccessKDissH2I();
 	float *HI         = Temp->GridHierarchyEntry->GridData->AccessHIDensity();
-        float *rho        = Temp->GridHierarchyEntry->GridData->AccessDensity();
 	float *HeI=NULL, *HeII=NULL;
 	if (RadiativeTransferHydrogenOnly == FALSE) {
 	  HeI  = Temp->GridHierarchyEntry->GridData->AccessHeIDensity();
