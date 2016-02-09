@@ -34,7 +34,7 @@ int AMRFLDSplit::WriteParameters(FILE *fptr) {
 
   // radiation scaling factors
   for (ibin=0; ibin<NumRadiationFields; ibin++)
-    fprintf(fptr, "AMRFLDRadiationScaling["ISYM"] = %22.16e\n", 
+    fprintf(fptr, "AMRFLDRadiationScaling[%"ISYM"] = %22.16e\n", 
 	    ibin, ErScale[ibin]);
   if (autoScale[0]) {
     fprintf(fptr, "AMRFLDAutomaticScaling = 1\n");
